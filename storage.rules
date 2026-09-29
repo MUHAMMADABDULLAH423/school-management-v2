@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() { return request.auth != null; }
+    function role() {
+      return isSignedIn()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+    function isPrincipal() { return role() == 'principal'; }
+    function isAdmin() { return role() == 'admin' || isPrincipal(); }
+
+    // Profile photos for teachers / staff / students
+    match /profiles/{recordId}/{fileName} {
+      allow read: if isSignedIn();
+      // admin & principal upload for anyone; a user may update their own photo
+      allow write: if isAdmin()
+        || (isSignedIn() && request.auth.uid == recordId);
+    }
+  }
+}

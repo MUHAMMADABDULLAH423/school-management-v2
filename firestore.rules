@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function role() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? userDoc().role : null;
+    }
+    function isPrincipal() { return role() == 'principal'; }
+    function isAdmin()     { return role() == 'admin' || isPrincipal(); }
+    function isTeacher()   { return role() == 'teacher'; }
+    function isStaffRole() { return role() == 'staff'; }
+    function isParent()    { return role() == 'parent'; }
+
+    // parentId stored on the linked student doc; parentEmail is the fallback so
+    // links created before the parent's first login keep working after the
+    // placeholder users doc is adopted to the real auth uid.
+    function studentDoc(studentId) {
+      return get(/databases/$(database)/documents/students/$(studentId)).data;
+    }
+    function parentOfStudent(studentId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/students/$(studentId))
+        && (studentDoc(studentId).parentId == request.auth.uid
+            || studentDoc(studentId).parentEmail == request.auth.token.email);
+    }
+
+    // ---- SCHOOL PROFILE ----
+    match /schools/{schoolId} {
+      allow get, list: if isSignedIn();
+      // principal and admin manage name/address/bank accounts
+      allow create, update: if isPrincipal() || role() == 'admin';
+      allow delete: if false;
+    }
+
+    // ---- USER ACCOUNTS ----
+    match /users/{userId} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId || isAdmin() ||
+        // placeholder adoption: principal/admin create email-keyed placeholders
+        // that the owner reads on first login to adopt to their auth uid
+        userId == request.auth.token.email
+      );
+      allow list: if isAdmin();
+      // PRINCIPAL may create ONLY teacher/staff accounts. Admin may create any role.
+      // Placeholders use email-keyed ids (pending_<email>).
+      allow create: if isSignedIn() && (
+        (role() == 'admin') ||
+        (isPrincipal() && request.resource.data.role in ['teacher', 'staff']) ||
+        // self-claim on first login: adopt your own placeholder to your auth uid.
+        // Creating the Firebase Auth account (console access required) is the
+        // authorization; the email must match the login email exactly.
+        (request.auth.uid == userId
+          && request.resource.data.email == request.auth.token.email)
+      );
+      // Admin: full update. Principal: only teacher/staff docs, limited fields, never role change.
+      // User: own profile limited fields.
+      allow update: if isSignedIn() && (
+        role() == 'admin' ||
+        (isPrincipal()
+          && resource.data.role in ['teacher', 'staff']
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['name', 'phone', 'photoURL', 'isActive', 'staffId', 'isFirstLogin'])) ||
+        (request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['name', 'phone', 'photoURL']))
+      );
+      allow delete: if role() == 'admin'
+        // owner may delete their own email-keyed placeholder after adoption
+        || (isSignedIn() && resource.data.email == request.auth.token.email);
+    }
+
+    // ---- STUDENTS: ADMIN ONLY for writes. Principal can NEVER write students. ----
+    // read rule uses resource.data so list queries only return permitted docs
+    match /students/{studentId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTeacher() || isStaffRole() ||
+        (isParent() && (resource.data.parentId == request.auth.uid
+          || resource.data.parentEmail == request.auth.token.email))
+      );
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    // ---- STAFF (teachers + non-teaching): principal and admin manage ----
+    match /staff/{staffId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isPrincipal() || role() == 'admin';
+      allow delete: if role() == 'admin';
+    }
+
+    match /classes/{classId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    // ---- ATTENDANCE ----
+    match /attendance/{id} {
+      allow read: if isSignedIn() && (
+        !isParent() ||
+        (resource.data.type == 'student' && parentOfStudent(resource.data.studentId))
+      );
+      allow create: if isAdmin() || isTeacher() ||
+        // staff may mark their OWN check-in
+        (isStaffRole() && request.resource.data.type == 'staff'
+          && request.resource.data.staffId == request.auth.uid);
+      allow update: if isAdmin() || isTeacher();
+      allow delete: if role() == 'admin';
+    }
+
+    // ---- FEES ----
+    match /fees/{feeId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || (isParent() && parentOfStudent(resource.data.studentId))
+      );
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    // ---- RESULTS / MARKS ----
+    match /results/{resultId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || isTeacher() || (isParent() && parentOfStudent(resource.data.studentId))
+      );
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if role() == 'admin';
+    }
+
+    match /exams/{examId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    match /timetable/{slotId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    match /diary/{diaryId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if role() == 'admin';
+    }
+
+    match /notifications/{nid} {
+      allow read: if isSignedIn() && (
+        resource.data.audience == 'all' ||
+        (resource.data.audience == 'role' && resource.data.toRole == role()) ||
+        (resource.data.audience == 'user' && resource.data.toUserId == request.auth.uid) ||
+        isAdmin()
+      );
+      allow create, delete: if role() == 'admin';
+      allow update: if role() == 'admin';
+    }
+
+    match /holidays/{hid} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    match /expenses/{eid} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    match /salary/{sid} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if role() == 'admin';
+    }
+
+    // ---- AUDIT LOG: append-only ----
+    match /auditLog/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

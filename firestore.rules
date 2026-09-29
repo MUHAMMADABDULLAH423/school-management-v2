@@ -45,7 +45,8 @@ service cloud.firestore {
         request.auth.uid == userId || isAdmin() ||
         // placeholder adoption: principal/admin create email-keyed placeholders
         // that the owner reads on first login to adopt to their auth uid
-        userId == request.auth.token.email
+        userId == request.auth.token.email ||
+        userId == 'pending_' + request.auth.token.email
       );
       allow list: if isAdmin();
       // PRINCIPAL may create ONLY teacher/staff accounts. Admin may create any role.

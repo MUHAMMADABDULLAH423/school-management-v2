@@ -71,7 +71,7 @@ service cloud.firestore {
         (request.auth.uid == userId
           && request.resource.data.role == resource.data.role
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['name', 'phone', 'photoURL']))
+               .hasOnly(['name', 'phone', 'photoURL', 'isFirstLogin']))
       );
       allow delete: if role() == 'admin'
         // owner may delete their own email-keyed placeholder after adoption

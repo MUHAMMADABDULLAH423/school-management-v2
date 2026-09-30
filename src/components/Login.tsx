@@ -3,14 +3,8 @@ import { LogIn, Mail, Lock, AlertCircle, GraduationCap, ShieldAlert, KeyRound, A
 import { useAuth } from '../context/AuthContext';
 import { Card, Field, TextInput, PrimaryButton, PasswordInput } from './ui';
 
-const formatCountdown = (secs: number): string => {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
-
 export const Login: React.FC = () => {
-  const { login, resetPassword, lockoutRemaining, firebaseReady } = useAuth();
+  const { login, resetPassword, firebaseReady } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,11 +14,9 @@ export const Login: React.FC = () => {
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState('');
 
-  const locked = lockoutRemaining > 0;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (locked || busy) return;
+    if (busy) return;
     setError('');
     setBusy(true);
     const res = await login(email, password);
@@ -160,7 +152,7 @@ export const Login: React.FC = () => {
                   placeholder="you@school.edu"
                   className="pl-9"
                   autoComplete="username"
-                  disabled={locked || busy}
+                  disabled={busy}
                   required
                 />
               </div>
@@ -175,7 +167,7 @@ export const Login: React.FC = () => {
                   placeholder="••••••••"
                   className="pl-9"
                   autoComplete="current-password"
-                  disabled={locked || busy}
+                  disabled={busy}
                   required
                 />
               </div>
@@ -191,29 +183,17 @@ export const Login: React.FC = () => {
               </button>
             </div>
 
-            {error && !locked && (
+            {error && (
               <div className="flex items-start gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2.5 text-xs text-rose-700">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
 
-            {locked && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-3 text-center">
-                <div className="flex items-center justify-center gap-1.5 text-sm font-bold text-amber-800">
-                  <ShieldAlert className="w-4 h-4" />
-                  Too many failed attempts
-                </div>
-                <div className="text-xs text-amber-700 mt-1">
-                  Try again in <span className="font-bold tabular-nums">{formatCountdown(lockoutRemaining)}</span>
-                </div>
-              </div>
-            )}
-
             <PrimaryButton
               type="submit"
               className="w-full py-2.5 text-base"
-              disabled={locked || busy || !firebaseReady}
+              disabled={busy || !firebaseReady}
             >
               {busy ? (
                 <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />

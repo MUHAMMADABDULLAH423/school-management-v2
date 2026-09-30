@@ -16,7 +16,6 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   isLoading: boolean;
   firebaseReady: boolean;
-  lockoutRemaining: number;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; firstLogin?: boolean }>;
   logout: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<boolean>;
@@ -27,13 +26,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const MAX_WRONG_ATTEMPTS = 3;
-const LOCKOUT_MS = 15 * 60 * 1000;
 const INACTIVITY_MS = 30 * 60 * 1000;
-
-const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
-const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} };
-const lsDel = (k: string) => { try { localStorage.removeItem(k); } catch {} };
 
 async function audit(userId: string, userName: string, action: string, category: string, details: string) {
   try {
@@ -47,7 +40,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [lockoutRemaining, setLockoutRemaining] = useState(0);
 
   const loadProfile = useCallback(async (fu: FirebaseUser): Promise<UserProfile | null> => {
     const snap = await getDoc(doc(db, 'users', fu.uid));
@@ -115,23 +107,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return unsub;
   }, [loadProfile]);
 
-  // Lockout countdown
-  useEffect(() => {
-    const until = parseInt(lsGet('smsv2_lockout_until') || '0', 10);
-    const diff = Math.ceil((until - Date.now()) / 1000);
-    if (diff > 0) setLockoutRemaining(diff);
-  }, []);
-  useEffect(() => {
-    if (lockoutRemaining <= 0) return;
-    const t = setInterval(() => {
-      setLockoutRemaining((p) => {
-        if (p <= 1) { lsDel('smsv2_lockout_until'); lsDel('smsv2_failed_attempts'); return 0; }
-        return p - 1;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [lockoutRemaining]);
-
   const logout = useCallback(async () => {
     if (currentUser) {
       await audit(currentUser.uid, currentUser.name, 'Logout', 'AUTH', `${currentUser.role} signed out`);
@@ -158,33 +133,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [currentUser, logout]);
 
-  const recordFailure = () => {
-    const n = parseInt(lsGet('smsv2_failed_attempts') || '0', 10) + 1;
-    lsSet('smsv2_failed_attempts', String(n));
-    if (n >= MAX_WRONG_ATTEMPTS) {
-      lsSet('smsv2_lockout_until', String(Date.now() + LOCKOUT_MS));
-      setLockoutRemaining(Math.ceil(LOCKOUT_MS / 1000));
-    }
-  };
-
   const login = useCallback(async (email: string, password: string) => {
-    if (lockoutRemaining > 0) {
-      return { ok: false, error: `Too many failed attempts. Try again in ${Math.ceil(lockoutRemaining / 60)} min.` };
-    }
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       const profile = await loadProfile(cred.user);
       if (!profile) {
         await signOut(auth);
-        recordFailure();
         return { ok: false, error: 'No active school account found for this login.' };
       }
-      lsDel('smsv2_failed_attempts');
       setCurrentUser(profile);
       await audit(profile.uid, profile.name, 'Login', 'AUTH', `${profile.role} signed in`);
       return { ok: true, firstLogin: profile.isFirstLogin };
     } catch (err: any) {
-      recordFailure();
       const code = err?.code || '';
       const msg =
         code.includes('user-not-found') || code.includes('wrong-password') || code.includes('invalid-credential')
@@ -194,7 +154,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             : 'Login failed. Check your connection and try again.';
       return { ok: false, error: msg };
     }
-  }, [lockoutRemaining, loadProfile]);
+  }, [loadProfile]);
 
   const changePassword = useCallback(async (newPassword: string) => {
     if (!firebaseUser || !currentUser) return false;
@@ -236,7 +196,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       value={{
         firebaseUser, currentUser, isLoading,
         firebaseReady: isFirebaseConfigured,
-        lockoutRemaining, login, logout, changePassword, resetPassword, refreshProfile,
+        login, logout, changePassword, resetPassword, refreshProfile,
       }}
     >
       {children}

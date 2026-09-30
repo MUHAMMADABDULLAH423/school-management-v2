@@ -151,6 +151,7 @@ const Shell: React.FC = () => {
   const { school, loading: schoolLoading } = useSchool();
   const [view, setView] = useState('__default__');
   const [pwChanged, setPwChanged] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   if (isLoading || schoolLoading) {
     return (
@@ -186,10 +187,19 @@ const Shell: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
-      <Sidebar active={activeItem.id} onNavigate={setView} items={items} />
+      <Sidebar
+        active={activeItem.id}
+        onNavigate={setView}
+        items={items}
+        desktopOpen={sidebarOpen}
+      />
       <div className="flex-1 min-w-0">
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
-          <Header title={activeItem.label} subtitle={school?.name} />
+          <Header
+            title={activeItem.label}
+            subtitle={school?.name}
+            onMenuClick={() => setSidebarOpen((o) => !o)}
+          />
           {role === 'principal' && <PrincipalDashboard key={activeItem.id} initialTab={activeItem.id} />}
           {role === 'admin' && <AdminDashboard key={activeItem.id} initialTab={activeItem.id} />}
           {role === 'teacher' && <TeacherDashboard key={activeItem.id} initialTab={activeItem.id} />}

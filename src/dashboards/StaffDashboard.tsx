@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, CalendarCheck, LayoutDashboard, User } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
 import { StaffMember } from '../types';
 import {
-  Avatar, Badge, Card, CardHeader, EmptyState, Spinner, Tabs,
+  Avatar, Badge, Card, CardHeader, EmptyState, Spinner,
 } from '../components/ui';
 import { StaffAttendance } from '../components/StaffAttendance';
 import { NoticeList } from '../components/NoticeList';
@@ -118,20 +117,12 @@ const ProfileTab: React.FC = () => {
 };
 
 export const StaffDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
-  const [tab, setTab] = useState(initialTab || 'overview');
+  // Navigation lives in the sidebar / hamburger drawer; the tab mirrors the
+  // selected nav item (Shell remounts on nav change via key).
+  const tab = initialTab || 'overview';
 
   return (
     <div>
-      <Tabs
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-          { id: 'myattendance', label: 'My Attendance', icon: <CalendarCheck className="w-4 h-4" /> },
-          { id: 'notices', label: 'Notices', icon: <Bell className="w-4 h-4" /> },
-          { id: 'profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
-        ]}
-      />
       {tab === 'overview' && (
         <div className="space-y-5">
           <ProfileCard />

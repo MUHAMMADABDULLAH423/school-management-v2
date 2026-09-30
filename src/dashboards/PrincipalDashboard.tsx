@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import {
-  LayoutDashboard, Users, School, ReceiptText, ScrollText,
-} from 'lucide-react';
 import { ExecutiveDashboard } from '../components/ExecutiveDashboard';
 import { StaffManager } from '../components/StaffManager';
 import { SchoolProfile } from '../components/SchoolProfile';
 import { AuditLogView } from '../components/AuditLogView';
 import { FeeOverview } from '../components/FeeOverview';
 import { DateFilter, filterLabelFor } from '../components/DateFilter';
-import { Tabs, Card, Spinner } from '../components/ui';
+import { Card, Spinner } from '../components/ui';
 import { useCollection } from '../hooks/useFirestore';
 import { FeeVoucher, Student, defaultDateFilter } from '../types';
 
@@ -46,22 +43,13 @@ const PrincipalFeeView: React.FC = () => {
   );
 };
 
-const iconCls = 'w-4 h-4';
-
 export const PrincipalDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
-  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
-
-  const tabs = [
-    { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard className={iconCls} /> },
-    { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
-    { id: 'school', label: 'School Profile', icon: <School className={iconCls} /> },
-    { id: 'fees', label: 'Fee Overview', icon: <ReceiptText className={iconCls} /> },
-    { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
-  ];
+  // Navigation lives in the sidebar / hamburger drawer; the tab mirrors the
+  // selected nav item (Shell remounts on nav change via key).
+  const activeTab = initialTab || 'overview';
 
   return (
     <div>
-      <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
       {activeTab === 'overview' && <ExecutiveDashboard />}
       {activeTab === 'staff' && <StaffManager />}
       {activeTab === 'school' && <SchoolProfile />}

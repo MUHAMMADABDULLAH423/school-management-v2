@@ -1,4 +1,5 @@
 import React from 'react';
+import { Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Avatar, Badge } from './ui';
 import { UserRole } from '../types';
@@ -22,8 +23,13 @@ const roleTone = (role: UserRole): 'green' | 'red' | 'amber' | 'blue' | 'slate' 
 
 /**
  * Page top bar: title + subtitle on the left; current date + user chip on the right.
+ * On desktop (md+), an optional hamburger toggles the sidebar open/closed.
  */
-export const Header: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => {
+export const Header: React.FC<{
+  title: string;
+  subtitle?: string;
+  onMenuClick?: () => void;
+}> = ({ title, subtitle, onMenuClick }) => {
   const { currentUser } = useAuth();
 
   const today = new Date().toLocaleDateString('en-GB', {
@@ -35,9 +41,21 @@ export const Header: React.FC<{ title: string; subtitle?: string }> = ({ title, 
 
   return (
     <header className="flex items-center justify-between gap-3 py-4">
-      <div className="min-w-0">
-        <h2 className="text-xl font-extrabold text-slate-900 truncate">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}
+      <div className="min-w-0 flex items-center gap-1">
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="hidden md:flex p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-200 active:bg-slate-300 shrink-0"
+            aria-label="Toggle menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-xl font-extrabold text-slate-900 truncate">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="flex items-center gap-3 shrink-0">

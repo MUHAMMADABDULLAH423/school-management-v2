@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  BadgeDollarSign, Bell, BookOpenText, CalendarCheck, GraduationCap,
-  LayoutDashboard, Printer,
+  Printer,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -11,7 +10,7 @@ import {
 } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, PrimaryButton,
-  Spinner, Table, Tabs,
+  Spinner, Table,
 } from '../components/ui';
 import { NoticeList } from '../components/NoticeList';
 // Built by a sibling agent — imported normally (default export):
@@ -307,22 +306,12 @@ const DiaryTab: React.FC = () => {
 };
 
 export const ParentDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
-  const [tab, setTab] = useState(initialTab || 'children');
+  // Navigation lives in the sidebar / hamburger drawer; the tab mirrors the
+  // selected nav item (Shell remounts on nav change via key).
+  const tab = initialTab || 'children';
 
   return (
     <div>
-      <Tabs
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'children', label: 'My Children', icon: <LayoutDashboard className="w-4 h-4" /> },
-          { id: 'attendance', label: 'Attendance', icon: <CalendarCheck className="w-4 h-4" /> },
-          { id: 'results', label: 'Results', icon: <GraduationCap className="w-4 h-4" /> },
-          { id: 'fees', label: 'Fees', icon: <BadgeDollarSign className="w-4 h-4" /> },
-          { id: 'diary', label: 'Diary', icon: <BookOpenText className="w-4 h-4" /> },
-          { id: 'notices', label: 'Notices', icon: <Bell className="w-4 h-4" /> },
-        ]}
-      />
       {tab === 'children' && <ChildrenTab />}
       {tab === 'attendance' && <AttendanceTab />}
       {tab === 'results' && <ResultsTab />}

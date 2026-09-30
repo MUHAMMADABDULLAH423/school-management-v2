@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   BadgeDollarSign, Bell, CalendarCheck, CalendarDays, ClipboardList,
-  GraduationCap, LayoutDashboard, ScrollText, UserCog, UserPlus,
-  Users, Wallet,
+  GraduationCap, ScrollText,
+  Users,
 } from 'lucide-react';
 import { useCollection } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
@@ -184,27 +184,12 @@ const AcademicsTab: React.FC = () => {
 
 export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
   useAuth(); // ensures auth context is live
-  const [tab, setTab] = useState(initialTab || 'overview');
-
-  const tabs = useMemo(() => ([
-    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'admissions', label: 'Admissions', icon: <UserPlus className="w-4 h-4" /> },
-    { id: 'students', label: 'Students', icon: <GraduationCap className="w-4 h-4" /> },
-    { id: 'staff', label: 'Teachers & Staff', icon: <Users className="w-4 h-4" /> },
-    { id: 'users', label: 'Users', icon: <UserCog className="w-4 h-4" /> },
-    { id: 'fees', label: 'Fees', icon: <BadgeDollarSign className="w-4 h-4" /> },
-    { id: 'attendance', label: 'Attendance', icon: <CalendarCheck className="w-4 h-4" /> },
-    { id: 'staffatt', label: 'Staff Attendance', icon: <ClipboardList className="w-4 h-4" /> },
-    { id: 'academics', label: 'Academics', icon: <ScrollText className="w-4 h-4" /> },
-    { id: 'notices', label: 'Notices', icon: <Bell className="w-4 h-4" /> },
-    { id: 'holidays', label: 'Holidays', icon: <CalendarDays className="w-4 h-4" /> },
-    { id: 'finance', label: 'Finance', icon: <Wallet className="w-4 h-4" /> },
-    { id: 'audit', label: 'Audit Log', icon: <ScrollText className="w-4 h-4" /> },
-  ]), []);
+  // Navigation lives in the sidebar / hamburger drawer; the tab mirrors the
+  // selected nav item (Shell remounts on nav change via key).
+  const tab = initialTab || 'overview';
 
   return (
     <div>
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === 'overview' && <AdminOverview />}
       {tab === 'admissions' && <StudentAdmission />}
       {tab === 'students' && <StudentAdmission />}

@@ -21,7 +21,9 @@ export const Sidebar: React.FC<{
   active: string;
   onNavigate: (id: string) => void;
   items: NavItem[];
-}> = ({ active, onNavigate, items }) => {
+  /** Desktop (md+) sidebar visibility — toggled by the hamburger in the page header. */
+  desktopOpen: boolean;
+}> = ({ active, onNavigate, items, desktopOpen }) => {
   const { currentUser, logout } = useAuth();
   const { school } = useSchool();
   const { ask, dialog } = useConfirm();
@@ -86,7 +88,8 @@ export const Sidebar: React.FC<{
 
   return (
     <>
-      {/* ---- Desktop vertical sidebar ---- */}
+      {/* ---- Desktop vertical sidebar (toggleable via header hamburger) ---- */}
+      {desktopOpen && (
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-slate-900 text-white min-h-screen sticky top-0 h-screen">
         <div className="flex items-center gap-2.5 px-5 py-5 border-b border-slate-800">
           {brandBlock(false)}
@@ -119,6 +122,7 @@ export const Sidebar: React.FC<{
           </button>
         </div>
       </aside>
+      )}
 
       {/* ---- Mobile: slim top bar with hamburger ---- */}
       <div className="md:hidden sticky top-0 z-40 bg-slate-900 text-white border-b border-slate-800">

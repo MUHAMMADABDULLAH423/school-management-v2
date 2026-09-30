@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Bell, BookOpenText, CalendarCheck, CalendarDays, GraduationCap, LayoutDashboard } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { BookOpenText, CalendarCheck, GraduationCap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useDoc } from '../hooks/useFirestore';
 import {
   AttendanceRecord, StaffMember, Student, todayStr,
 } from '../types';
-import { Badge, Card, CardHeader, EmptyState, StatCard, Tabs } from '../components/ui';
+import { Badge, Card, CardHeader, EmptyState, StatCard } from '../components/ui';
 import { AttendanceManager } from '../components/AttendanceManager';
 import { DiaryManager } from '../components/DiaryManager';
 import { MarksManager } from '../components/MarksManager';
@@ -94,22 +94,12 @@ const TeacherOverview: React.FC = () => {
 };
 
 export const TeacherDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
-  const [tab, setTab] = useState(initialTab || 'overview');
+  // Navigation lives in the sidebar / hamburger drawer; the tab mirrors the
+  // selected nav item (Shell remounts on nav change via key).
+  const tab = initialTab || 'overview';
 
   return (
     <div>
-      <Tabs
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-          { id: 'attendance', label: 'Mark Attendance', icon: <CalendarCheck className="w-4 h-4" /> },
-          { id: 'diary', label: 'Diary', icon: <BookOpenText className="w-4 h-4" /> },
-          { id: 'marks', label: 'Marks', icon: <GraduationCap className="w-4 h-4" /> },
-          { id: 'timetable', label: 'Timetable', icon: <CalendarDays className="w-4 h-4" /> },
-          { id: 'notices', label: 'Notices', icon: <Bell className="w-4 h-4" /> },
-        ]}
-      />
       {tab === 'overview' && <TeacherOverview />}
       {tab === 'attendance' && <AttendanceManager />}
       {tab === 'diary' && <DiaryManager teacherOnly />}

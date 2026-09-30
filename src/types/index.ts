@@ -28,6 +28,8 @@ export interface SchoolProfile {
   bankAccounts: BankAccount[];
   gpsLocation: { lat: number; lng: number; radius: number };
   academicYear: string;
+  /** Base64 data-URL school logo (client-resized, no Storage needed). */
+  logo?: string;
   createdAt: string;
 }
 

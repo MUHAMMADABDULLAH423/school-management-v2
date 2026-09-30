@@ -1,7 +1,8 @@
 import React, { ReactNode, useEffect, useState } from 'react';
-import { LogOut, GraduationCap, Menu, X } from 'lucide-react';
+import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../hooks/useFirestore';
+import { SchoolBrand } from './SchoolBrand';
 import { useConfirm } from './ui';
 
 export interface NavItem {
@@ -72,9 +73,7 @@ export const Sidebar: React.FC<{
 
   const brandBlock = () => (
     <>
-      <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-        <GraduationCap className="w-4 h-4 text-white" />
-      </div>
+      <SchoolBrand size={32} />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-extrabold truncate leading-tight">{schoolName}</div>
         <div className="text-[11px] text-slate-400 capitalize">{currentUser?.role} portal</div>

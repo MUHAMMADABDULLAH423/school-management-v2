@@ -10,6 +10,7 @@ import { useSchool } from './hooks/useFirestore';
 import { Login } from './components/Login';
 import { Sidebar, NavItem } from './components/Sidebar';
 import { Header } from './components/Header';
+import { SchoolBrand } from './components/SchoolBrand';
 import { SchoolProfile } from './components/SchoolProfile';
 import { PrincipalDashboard } from './dashboards/PrincipalDashboard';
 import { AdminDashboard } from './dashboards/AdminDashboard';
@@ -203,9 +204,7 @@ const Shell: React.FC = () => {
         >
           <Menu className="w-6 h-6" />
         </button>
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-          <GraduationCap className="w-4 h-4 text-white" />
-        </div>
+        <SchoolBrand size={32} />
         <div className="min-w-0">
           <div className="text-sm font-extrabold truncate leading-tight">
             {school?.name || 'School Portal'}

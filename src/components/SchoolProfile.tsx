@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
-import { Landmark, MapPin, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { CalendarDays, Camera, GraduationCap, ImagePlus, Landmark, Mail, MapPin, Pencil, Phone, Plus, Star, Trash2 } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../hooks/useFirestore';
@@ -27,6 +27,7 @@ interface ProfileForm {
   lat: string;
   lng: string;
   radius: string;
+  logo: string;
 }
 
 interface BankForm {
@@ -53,7 +54,7 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
   const [form, setForm] = useState<ProfileForm>({
     name: '', address: '', contact: '', email: '',
     affiliation: '', registrationNumber: '', academicYear: '',
-    lat: '', lng: '', radius: '100',
+    lat: '', lng: '', radius: '100', logo: '',
   });
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const initialized = useRef(false);
@@ -84,6 +85,7 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
         lat: school.gpsLocation ? String(school.gpsLocation.lat) : '',
         lng: school.gpsLocation ? String(school.gpsLocation.lng) : '',
         radius: school.gpsLocation ? String(school.gpsLocation.radius) : '100',
+        logo: school.logo || '',
       });
       setBanks(school.bankAccounts || []);
     }
@@ -128,6 +130,46 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
     }
   };
 
+  /* ---------- School logo: client-resized base64 (no Storage needed) ---------- */
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const handleLogoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file for the logo.');
+      return;
+    }
+    setLogoUploading(true);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 256;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
+        const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        setField('logo', canvas.toDataURL(outType, 0.9));
+      } catch {
+        setError('Could not process the logo image. Try another file.');
+      } finally {
+        URL.revokeObjectURL(url);
+        setLogoUploading(false);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setLogoUploading(false);
+      setError('Could not read the logo image. Try another file.');
+    };
+    img.src = url;
+  };
+
   const save = async () => {
     if (!canEdit) return;
     if (!form.name.trim()) return setError('School name is required.');
@@ -148,6 +190,7 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
           lng: parseFloat(form.lng) || 0,
           radius: parseFloat(form.radius) || 100,
         },
+        logo: form.logo.trim(),
         bankAccounts: banks,
       };
       if (!school) payload.createdAt = new Date().toISOString();
@@ -248,6 +291,57 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
 
   const formBody = (
     <>
+      <div className="mb-5">
+        <span className="block text-xs font-semibold text-slate-600 mb-1">School logo</span>
+        <div className="flex items-center gap-4">
+          <div className="relative w-20 h-20 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+            {form.logo ? (
+              <img src={form.logo} alt="School logo" className="w-full h-full object-contain" />
+            ) : (
+              <ImagePlus className="w-8 h-8 text-slate-300" />
+            )}
+            {logoUploading && (
+              <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!canEdit || logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {form.logo ? 'Change logo' : 'Upload logo'}
+              </button>
+              {form.logo && (
+                <button
+                  type="button"
+                  disabled={!canEdit || logoUploading}
+                  onClick={() => setField('logo', '')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Shows next to the school name on every portal. PNG/JPG, auto-resized.
+            </span>
+          </div>
+        </div>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleLogoFile(e.target.files?.[0])}
+        />
+      </div>
       <div className="grid md:grid-cols-2 gap-4">
         <Field label="School name *">
           <TextInput value={form.name} onChange={(e) => setField('name', e.target.value)} disabled={!canEdit} placeholder="e.g. Green Wood School" />
@@ -485,13 +579,59 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="School Profile"
-        subtitle="School details and bank accounts for fee collection."
-      />
-      <div className="p-5">{formBody}</div>
-    </Card>
+    <div className="space-y-5">
+      {/* Colorful profile banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg">
+        <div className="absolute -top-20 -right-16 w-72 h-72 rounded-full bg-white/10" />
+        <div className="absolute -bottom-24 -left-12 w-64 h-64 rounded-full bg-white/10" />
+        <div className="absolute top-10 left-1/3 w-24 h-24 rounded-full bg-white/5" />
+        <div className="relative p-6 flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="w-20 h-20 rounded-2xl bg-white p-1.5 shadow-lg shrink-0 overflow-hidden">
+            {form.logo ? (
+              <img src={form.logo} alt="School logo" className="w-full h-full object-contain" />
+            ) : (
+              <div className="w-full h-full rounded-xl bg-indigo-100 flex items-center justify-center">
+                <GraduationCap className="w-8 h-8 text-indigo-600" />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-2xl font-extrabold truncate">{form.name.trim() || 'Your School'}</h3>
+            {form.address.trim() && (
+              <p className="text-sm text-white/85 truncate mt-0.5 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{form.address.trim()}</span>
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {form.contact.trim() && (
+                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-xs font-semibold">
+                  <Phone className="w-3 h-3" /> {form.contact.trim()}
+                </span>
+              )}
+              {form.email.trim() && (
+                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-xs font-semibold">
+                  <Mail className="w-3 h-3" /> {form.email.trim()}
+                </span>
+              )}
+              {form.academicYear.trim() && (
+                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-xs font-semibold">
+                  <CalendarDays className="w-3 h-3" /> {form.academicYear.trim()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader
+          title="School Profile"
+          subtitle="School details and bank accounts for fee collection."
+        />
+        <div className="p-5">{formBody}</div>
+      </Card>
+    </div>
   );
 };
 

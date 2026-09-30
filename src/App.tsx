@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
-  UserPlus, GraduationCap, UserCog, CalendarCheck, ClipboardList,
+  GraduationCap, UserCog, CalendarCheck, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
   Menu,
 } from 'lucide-react';
@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
 import { Login } from './components/Login';
 import { Sidebar, NavItem } from './components/Sidebar';
-import { Header } from './components/Header';
+import { Header, roleTone } from './components/Header';
 import { SchoolProfile } from './components/SchoolProfile';
 import { PrincipalDashboard } from './dashboards/PrincipalDashboard';
 import { AdminDashboard } from './dashboards/AdminDashboard';
@@ -20,6 +20,7 @@ import { seedDemoData } from './services/seed';
 import { UserRole } from './types';
 import {
   Card, Modal, Field, TextInput, PrimaryButton, Spinner, EmptyState,
+  Avatar, Badge,
 } from './components/ui';
 
 const iconCls = 'w-4 h-4';
@@ -29,16 +30,15 @@ const NAV: Record<UserRole, NavItem[]> = {
   principal: [
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
+    { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
     { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
   ],
   admin: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },
-    { id: 'admissions', label: 'Admissions', icon: <UserPlus className={iconCls} /> },
     { id: 'students', label: 'Students', icon: <GraduationCap className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
-    { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
     { id: 'fees', label: 'Fees', icon: <BadgeDollarSign className={iconCls} /> },
     { id: 'attendance', label: 'Attendance', icon: <CalendarCheck className={iconCls} /> },
     { id: 'staffatt', label: 'Staff Attendance', icon: <ClipboardList className={iconCls} /> },
@@ -186,6 +186,10 @@ const Shell: React.FC = () => {
   const activeView = view === '__default__' ? items[0].id : view;
   const activeItem = items.find((i) => i.id === activeView) || items[0];
 
+  const today = new Date().toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  });
+
   return (
     <div className="min-h-screen bg-slate-100">
       {/* ---- Desktop top bar: school brand stays fixed here, never collapses ---- */}
@@ -207,6 +211,23 @@ const Shell: React.FC = () => {
           </div>
           <div className="text-[11px] text-slate-400 capitalize">{role} portal</div>
         </div>
+        <div className="flex-1" />
+        <span className="hidden lg:block text-xs font-semibold text-slate-300 tabular-nums">
+          {today}
+        </span>
+        {currentUser && (
+          <div className="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 shadow-sm">
+            <Avatar src={currentUser.photoURL} name={currentUser.name} size={28} />
+            <div className="leading-tight">
+              <div className="text-xs font-bold text-slate-900 max-w-[140px] truncate">
+                {currentUser.name}
+              </div>
+              <Badge tone={roleTone(currentUser.role)}>
+                <span className="capitalize text-[10px]">{currentUser.role}</span>
+              </Badge>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="md:flex">

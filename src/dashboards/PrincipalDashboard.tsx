@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExecutiveDashboard } from '../components/ExecutiveDashboard';
 import { StaffManager } from '../components/StaffManager';
+import UserManager from '../components/UserManager';
 import { SchoolProfile } from '../components/SchoolProfile';
 import { AuditLogView } from '../components/AuditLogView';
 import { FeeOverview } from '../components/FeeOverview';
@@ -52,6 +53,7 @@ export const PrincipalDashboard: React.FC<{ initialTab?: string }> = ({ initialT
     <div>
       {activeTab === 'overview' && <ExecutiveDashboard />}
       {activeTab === 'staff' && <StaffManager />}
+      {activeTab === 'users' && <UserManager />}
       {activeTab === 'school' && <SchoolProfile />}
       {activeTab === 'fees' && <PrincipalFeeView />}
       {activeTab === 'audit' && <AuditLogView />}

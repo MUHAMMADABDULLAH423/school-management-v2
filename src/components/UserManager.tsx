@@ -1,9 +1,9 @@
 /**
- * UserManager — ADMIN ONLY user account management.
+ * UserManager — user account management (login profiles).
  *
- * Guarded by <RequireRole roles={['admin']}> at the dashboard level AND by
- * firestore.rules (users: create/update/delete = admin only; principal may
- * create teacher/staff users only — that path lives in StaffManager).
+ * Lives in the PRINCIPAL portal (moved from admin). Guarded by the role check
+ * at the dashboard level AND by firestore.rules (users: create/list/update/delete
+ * require admin or principal).
  *
  * IMPORTANT: this manages Firestore user PROFILE docs only. The Firebase Auth
  * login (email/password) must be created in the Firebase Console

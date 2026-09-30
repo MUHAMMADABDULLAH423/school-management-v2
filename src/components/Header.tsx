@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Avatar, Badge } from './ui';
 import { UserRole } from '../types';
 
-const roleTone = (role: UserRole): 'green' | 'red' | 'amber' | 'blue' | 'slate' | 'violet' => {
+export const roleTone = (role: UserRole): 'green' | 'red' | 'amber' | 'blue' | 'slate' | 'violet' => {
   switch (role) {
     case 'principal':
       return 'violet';
@@ -40,7 +40,8 @@ export const Header: React.FC<{ title: string; subtitle?: string }> = ({ title, 
         {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
+      {/* Date + user chip: mobile only — on desktop these live in the dark top bar. */}
+      <div className="flex items-center gap-3 shrink-0 md:hidden">
         <span className="hidden sm:block text-xs font-semibold text-slate-500 tabular-nums">
           {today}
         </span>

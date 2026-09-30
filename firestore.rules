@@ -49,32 +49,25 @@ service cloud.firestore {
         userId == 'pending_' + request.auth.token.email
       );
       allow list: if isAdmin();
-      // PRINCIPAL may create ONLY teacher/staff accounts. Admin may create any role.
-      // Placeholders use email-keyed ids (pending_<email>).
+      // ADMIN and PRINCIPAL may create accounts of any role (Users menu lives in
+      // the principal portal). Placeholders use email-keyed ids (pending_<email>).
       allow create: if isSignedIn() && (
-        (role() == 'admin') ||
-        (isPrincipal() && request.resource.data.role in ['teacher', 'staff']) ||
+        isAdmin() ||
         // self-claim on first login: adopt your own placeholder to your auth uid.
         // Creating the Firebase Auth account (console access required) is the
         // authorization; the email must match the login email exactly.
         (request.auth.uid == userId
           && request.resource.data.email == request.auth.token.email)
       );
-      // Admin: full update. Principal: only teacher/staff docs, limited fields, never role change.
-      // User: own profile limited fields.
+      // Admin/Principal: full update (user management). User: own profile, limited fields.
       allow update: if isSignedIn() && (
-        role() == 'admin' ||
-        (isPrincipal()
-          && resource.data.role in ['teacher', 'staff']
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['name', 'phone', 'photoURL', 'isActive', 'staffId', 'isFirstLogin'])) ||
+        isAdmin() ||
         (request.auth.uid == userId
           && request.resource.data.role == resource.data.role
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['name', 'phone', 'photoURL', 'isFirstLogin']))
       );
-      allow delete: if role() == 'admin'
+      allow delete: if isAdmin()
         // owner may delete their own email-keyed placeholder after adoption
         || (isSignedIn() && resource.data.email == request.auth.token.email);
     }

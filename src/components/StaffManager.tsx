@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
-import { Pencil, Plus, UserCheck, UserX } from 'lucide-react';
+import { Pencil, Plus, UserCheck, UserX, Eye } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
-import { StaffMember, StaffRole, pendingUserDocId } from '../types';
+import { StaffMember, StaffRole, pendingUserDocId, formatPKR } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal,
   PrimaryButton, SearchInput, Select, Spinner, Table, TextInput, useConfirm,
@@ -49,6 +49,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const [roleFilter, setRoleFilter] = useState<'all' | StaffRole>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<StaffMember | null>(null);
   /** Stable doc id for the record being edited/added — also the ImageUploadField recordId. */
   const [modalId, setModalId] = useState('');
   const [form, setForm] = useState<StaffForm>(emptyForm());
@@ -322,6 +323,14 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                 <td className="px-3 py-2.5 whitespace-nowrap text-right">
                   <button
                     type="button"
+                    onClick={() => setViewing(m)}
+                    title="View full detail"
+                    className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 mr-1"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => openEdit(m)}
                     title="Edit"
                     className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 mr-1"
@@ -471,9 +480,61 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
         </Modal>
       )}
 
+      {viewing && (
+        <Modal
+          title="Staff Detail"
+          subtitle={`${viewing.name} · ${viewing.designation || viewing.role}`}
+          onClose={() => setViewing(null)}
+        >
+          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+            <Avatar src={viewing.photo} name={viewing.name} size={72} />
+            <div className="min-w-0">
+              <div className="text-lg font-extrabold text-slate-900 truncate">{viewing.name}</div>
+              <div className="text-sm text-slate-500">
+                {viewing.designation || '—'}{viewing.department ? ` · ${viewing.department}` : ''}
+              </div>
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                <Badge tone={viewing.role === 'teacher' ? 'blue' : 'violet'}>
+                  {viewing.role === 'teacher' ? 'Teacher' : 'Staff'}
+                </Badge>
+                <Badge tone={viewing.isActive ? 'green' : 'red'}>
+                  {viewing.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+            <DetailRow label="Designation" value={viewing.designation} />
+            <DetailRow label="Department" value={viewing.department} />
+            <DetailRow label="Email" value={viewing.email} />
+            <DetailRow label="Phone" value={viewing.phone} />
+            <DetailRow label="Qualification" value={viewing.qualification} />
+            <DetailRow
+              label="Salary"
+              value={viewing.salary ? formatPKR(viewing.salary) : undefined}
+            />
+            <DetailRow label="Joining Date" value={viewing.joiningDate} />
+            <DetailRow label="Status" value={viewing.isActive ? 'Active' : 'Inactive'} />
+            <div className="sm:col-span-2">
+              <DetailRow label="Subjects" value={(viewing.subjects || []).join(', ')} />
+            </div>
+            <div className="sm:col-span-2">
+              <DetailRow label="Assigned Classes" value={(viewing.assignedClasses || []).join(', ')} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {dialog}
     </Card>
   );
 };
+
+const DetailRow: React.FC<{ label: string; value?: string }> = ({ label, value }) => (
+  <div>
+    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="text-sm font-semibold text-slate-800 mt-0.5 break-words">{value || '—'}</div>
+  </div>
+);
 
 export default StaffManager;

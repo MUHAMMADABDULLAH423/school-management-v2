@@ -12,7 +12,7 @@ import React, { useMemo, useState } from 'react';
 import {
   addDoc, collection, doc, updateDoc,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
@@ -69,6 +69,7 @@ const StudentAdmission: React.FC = () => {
   const [classFilter, setClassFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
+  const [viewing, setViewing] = useState<Student | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [photoRecordId, setPhotoRecordId] = useState('');
   const [error, setError] = useState('');
@@ -195,7 +196,7 @@ const StudentAdmission: React.FC = () => {
     <div>
       <Card>
         <CardHeader
-          title="Admissions"
+          title="Students"
           subtitle={`${filtered.length} of ${students.length} students`}
           action={
             <PrimaryButton onClick={openAdd}>
@@ -254,7 +255,15 @@ const StudentAdmission: React.FC = () => {
                     {s.isActive ? 'Active' : 'Inactive'}
                   </button>
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(s)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                    title="View full detail"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => openEdit(s)}
@@ -342,9 +351,57 @@ const StudentAdmission: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {viewing && (
+        <Modal
+          title="Student Detail"
+          subtitle={`${viewing.name} · Roll ${viewing.rollNumber || '—'}`}
+          onClose={() => setViewing(null)}
+        >
+          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+            <Avatar src={viewing.photo} name={viewing.name} size={72} />
+            <div className="min-w-0">
+              <div className="text-lg font-extrabold text-slate-900 truncate">{viewing.name}</div>
+              <div className="text-sm text-slate-500">
+                Class {viewing.class}-{viewing.section} · Roll {viewing.rollNumber || '—'}
+              </div>
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                <Badge tone={viewing.isActive ? 'green' : 'red'}>
+                  {viewing.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+                <Badge tone={feeBadgeTone(viewing.feeStatus)}>{viewing.feeStatus}</Badge>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-4">
+            <DetailRow label="Father / Guardian" value={viewing.parentName} />
+            <DetailRow label="Date of Birth" value={viewing.dob} />
+            <DetailRow label="Gender" value={viewing.gender} />
+            <DetailRow label="Class" value={viewing.class} />
+            <DetailRow label="Section" value={viewing.section} />
+            <DetailRow label="Roll Number" value={viewing.rollNumber} />
+            <DetailRow label="Parent Phone" value={viewing.parentPhone} />
+            <DetailRow label="Parent WhatsApp" value={viewing.parentWhatsApp} />
+            <DetailRow label="Parent Email" value={viewing.parentEmail} />
+            <DetailRow label="Academic Year" value={viewing.academicYear} />
+            <DetailRow label="Fee Status" value={viewing.feeStatus} />
+            <DetailRow label="Status" value={viewing.isActive ? 'Active' : 'Inactive'} />
+            <div className="sm:col-span-2">
+              <DetailRow label="Address" value={viewing.address} />
+            </div>
+          </div>
+        </Modal>
+      )}
       {dialog}
     </div>
   );
 };
+
+const DetailRow: React.FC<{ label: string; value?: string }> = ({ label, value }) => (
+  <div>
+    <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="text-sm font-semibold text-slate-800 mt-0.5 break-words">{value || '—'}</div>
+  </div>
+);
 
 export default StudentAdmission;

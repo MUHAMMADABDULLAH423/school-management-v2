@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
 import { Login } from './components/Login';
 import { Sidebar, NavItem } from './components/Sidebar';
-import { Header, roleTone } from './components/Header';
+import { Header } from './components/Header';
 import { SchoolProfile } from './components/SchoolProfile';
 import { PrincipalDashboard } from './dashboards/PrincipalDashboard';
 import { AdminDashboard } from './dashboards/AdminDashboard';
@@ -20,7 +20,7 @@ import { seedDemoData } from './services/seed';
 import { UserRole } from './types';
 import {
   Card, Modal, Field, TextInput, PrimaryButton, Spinner, EmptyState,
-  Avatar, Badge,
+  Avatar,
 } from './components/ui';
 
 const iconCls = 'w-4 h-4';
@@ -216,15 +216,13 @@ const Shell: React.FC = () => {
           {today}
         </span>
         {currentUser && (
-          <div className="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 shadow-sm">
-            <Avatar src={currentUser.photoURL} name={currentUser.name} size={28} />
+          <div className="flex items-center gap-2.5 pl-1">
+            <Avatar src={currentUser.photoURL} name={currentUser.name} size={34} />
             <div className="leading-tight">
-              <div className="text-xs font-bold text-slate-900 max-w-[140px] truncate">
+              <div className="text-xs font-bold text-white max-w-[140px] truncate">
                 {currentUser.name}
               </div>
-              <Badge tone={roleTone(currentUser.role)}>
-                <span className="capitalize text-[10px]">{currentUser.role}</span>
-              </Badge>
+              <div className="text-[10px] text-slate-400 capitalize">{currentUser.role}</div>
             </div>
           </div>
         )}

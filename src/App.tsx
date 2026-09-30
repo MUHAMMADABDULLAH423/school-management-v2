@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
   UserPlus, GraduationCap, UserCog, CalendarCheck, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
+  Menu,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
@@ -186,25 +187,44 @@ const Shell: React.FC = () => {
   const activeItem = items.find((i) => i.id === activeView) || items[0];
 
   return (
-    <div className="min-h-screen bg-slate-100 md:flex">
-      <Sidebar
-        active={activeItem.id}
-        onNavigate={setView}
-        items={items}
-        desktopOpen={sidebarOpen}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
-          <Header
-            title={activeItem.label}
-            subtitle={school?.name}
-            onMenuClick={() => setSidebarOpen((o) => !o)}
-          />
-          {role === 'principal' && <PrincipalDashboard key={activeItem.id} initialTab={activeItem.id} />}
-          {role === 'admin' && <AdminDashboard key={activeItem.id} initialTab={activeItem.id} />}
-          {role === 'teacher' && <TeacherDashboard key={activeItem.id} initialTab={activeItem.id} />}
-          {role === 'staff' && <StaffDashboard key={activeItem.id} initialTab={activeItem.id} />}
-          {role === 'parent' && <ParentDashboard key={activeItem.id} initialTab={activeItem.id} />}
+    <div className="min-h-screen bg-slate-100">
+      {/* ---- Desktop top bar: school brand stays fixed here, never collapses ---- */}
+      <div className="hidden md:flex sticky top-0 z-40 h-14 items-center gap-2 px-4 bg-slate-900 text-white border-b border-slate-800">
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((o) => !o)}
+          className="p-2 -ml-1 rounded-lg text-slate-200 hover:bg-slate-800 active:bg-slate-700"
+          aria-label="Toggle menu"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+          <GraduationCap className="w-4 h-4 text-white" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-extrabold truncate leading-tight">
+            {school?.name || 'School Portal'}
+          </div>
+          <div className="text-[11px] text-slate-400 capitalize">{role} portal</div>
+        </div>
+      </div>
+
+      <div className="md:flex">
+        <Sidebar
+          active={activeItem.id}
+          onNavigate={setView}
+          items={items}
+          desktopOpen={sidebarOpen}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+            <Header title={activeItem.label} />
+            {role === 'principal' && <PrincipalDashboard key={activeItem.id} initialTab={activeItem.id} />}
+            {role === 'admin' && <AdminDashboard key={activeItem.id} initialTab={activeItem.id} />}
+            {role === 'teacher' && <TeacherDashboard key={activeItem.id} initialTab={activeItem.id} />}
+            {role === 'staff' && <StaffDashboard key={activeItem.id} initialTab={activeItem.id} />}
+            {role === 'parent' && <ParentDashboard key={activeItem.id} initialTab={activeItem.id} />}
+          </div>
         </div>
       </div>
     </div>

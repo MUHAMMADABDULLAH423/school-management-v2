@@ -70,14 +70,10 @@ export const Sidebar: React.FC<{
         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
     }`;
 
-  const brandBlock = (compact: boolean) => (
+  const brandBlock = () => (
     <>
-      <div
-        className={`${
-          compact ? 'w-8 h-8 rounded-lg' : 'w-9 h-9 rounded-xl'
-        } bg-indigo-600 flex items-center justify-center shrink-0`}
-      >
-        <GraduationCap className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+      <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+        <GraduationCap className="w-4 h-4 text-white" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-extrabold truncate leading-tight">{schoolName}</div>
@@ -88,13 +84,9 @@ export const Sidebar: React.FC<{
 
   return (
     <>
-      {/* ---- Desktop vertical sidebar (toggleable via header hamburger) ---- */}
+      {/* ---- Desktop vertical sidebar (toggleable via top-bar hamburger) ---- */}
       {desktopOpen && (
-      <aside className="hidden md:flex flex-col w-64 shrink-0 bg-slate-900 text-white min-h-screen sticky top-0 h-screen">
-        <div className="flex items-center gap-2.5 px-5 py-5 border-b border-slate-800">
-          {brandBlock(false)}
-        </div>
-
+      <aside className="hidden md:flex flex-col w-64 shrink-0 bg-slate-900 text-white sticky top-14 h-[calc(100vh-3.5rem)]">
         <nav className="flex-1 overflow-y-auto nice-scroll px-3 py-4 space-y-1">
           {items.map((item) => (
             <button
@@ -135,7 +127,7 @@ export const Sidebar: React.FC<{
           >
             <Menu className="w-6 h-6" />
           </button>
-          {brandBlock(true)}
+          {brandBlock()}
           <button
             type="button"
             onClick={handleLogout}
@@ -168,7 +160,7 @@ export const Sidebar: React.FC<{
           aria-label="Menu"
         >
           <div className="flex items-center gap-2.5 px-4 py-4 border-b border-slate-800">
-            {brandBlock(true)}
+            {brandBlock()}
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}

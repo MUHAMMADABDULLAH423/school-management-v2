@@ -34,7 +34,7 @@ export const Header: React.FC<{ title: string; subtitle?: string }> = ({ title, 
   });
 
   return (
-    <header className="flex items-center justify-between gap-3 py-4">
+    <header className="flex items-center justify-between gap-3 py-2">
       <div className="min-w-0">
         <h2 className="text-xl font-extrabold text-slate-900 uppercase tracking-wide truncate">{title}</h2>
         {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}

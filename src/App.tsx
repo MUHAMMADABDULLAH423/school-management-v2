@@ -236,7 +236,7 @@ const Shell: React.FC = () => {
           desktopOpen={sidebarOpen}
         />
         <div className="flex-1 min-w-0">
-          <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+          <div className="max-w-7xl mx-auto px-4 pt-3 pb-6 space-y-4">
             <Header title={activeItem.label} />
             {role === 'principal' && <PrincipalDashboard key={activeItem.id} initialTab={activeItem.id} />}
             {role === 'admin' && <AdminDashboard key={activeItem.id} initialTab={activeItem.id} />}

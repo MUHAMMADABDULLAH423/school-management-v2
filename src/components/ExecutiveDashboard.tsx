@@ -58,57 +58,60 @@ export const ExecutiveDashboard: React.FC = () => {
   if (l1 || l2 || l3 || l4) return <Spinner />;
 
   return (
-    <div className="space-y-5">
-      <DateFilter filter={filter} onChange={setFilter} />
-
-      {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
-        <StatCard
-          label="Total Students"
-          value={String(kpis.activeStudents.length)}
-          sub={`${students.length} records`}
-          icon={<Users className={iconCls} />}
-          tone="indigo"
-        />
-        <StatCard
-          label="Teachers"
-          value={String(kpis.teachers.length)}
-          sub="active teaching staff"
-          icon={<GraduationCap className={iconCls} />}
-          tone="sky"
-        />
-        <StatCard
-          label="Staff"
-          value={String(kpis.nonTeaching.length)}
-          sub="active non-teaching"
-          icon={<Briefcase className={iconCls} />}
-          tone="violet"
-        />
-        <StatCard
-          label="Today's Attendance"
-          value={kpis.todayRate === null ? '—' : `${kpis.todayRate}%`}
-          sub={
-            kpis.todayRecords.length === 0
-              ? 'no records today'
-              : `${kpis.presentToday} of ${kpis.todayRecords.length} present`
-          }
-          icon={<CalendarCheck className={iconCls} />}
-          tone="emerald"
-        />
-        <StatCard
-          label="Fee Collected"
-          value={formatPKR(kpis.collected)}
-          sub={monthLabel(kpis.curMonth)}
-          icon={<Banknote className={iconCls} />}
-          tone="emerald"
-        />
-        <StatCard
-          label="Fee Pending"
-          value={formatPKR(kpis.pending)}
-          sub={monthLabel(kpis.curMonth)}
-          icon={<Wallet className={iconCls} />}
-          tone="rose"
-        />
+    <div className="space-y-4">
+      {/* KPI cards (left) + date filter (right, sticky) */}
+      <div className="grid gap-4 lg:grid-cols-3 items-start">
+        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+          <StatCard
+            label="Total Students"
+            value={String(kpis.activeStudents.length)}
+            sub={`${students.length} records`}
+            icon={<Users className={iconCls} />}
+            tone="indigo"
+          />
+          <StatCard
+            label="Teachers"
+            value={String(kpis.teachers.length)}
+            sub="active teaching staff"
+            icon={<GraduationCap className={iconCls} />}
+            tone="sky"
+          />
+          <StatCard
+            label="Staff"
+            value={String(kpis.nonTeaching.length)}
+            sub="active non-teaching"
+            icon={<Briefcase className={iconCls} />}
+            tone="violet"
+          />
+          <StatCard
+            label="Today's Attendance"
+            value={kpis.todayRate === null ? '—' : `${kpis.todayRate}%`}
+            sub={
+              kpis.todayRecords.length === 0
+                ? 'no records today'
+                : `${kpis.presentToday} of ${kpis.todayRecords.length} present`
+            }
+            icon={<CalendarCheck className={iconCls} />}
+            tone="emerald"
+          />
+          <StatCard
+            label="Fee Collected"
+            value={formatPKR(kpis.collected)}
+            sub={monthLabel(kpis.curMonth)}
+            icon={<Banknote className={iconCls} />}
+            tone="emerald"
+          />
+          <StatCard
+            label="Fee Pending"
+            value={formatPKR(kpis.pending)}
+            sub={monthLabel(kpis.curMonth)}
+            icon={<Wallet className={iconCls} />}
+            tone="rose"
+          />
+        </div>
+        <div className="lg:sticky lg:top-[4.5rem]">
+          <DateFilter filter={filter} onChange={setFilter} compact />
+        </div>
       </div>
 
       <FeeOverview fees={fees} students={students} filter={filter} filterLabel={label} />

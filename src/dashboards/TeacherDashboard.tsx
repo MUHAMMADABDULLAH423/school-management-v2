@@ -11,6 +11,7 @@ import { DiaryManager } from '../components/DiaryManager';
 import { MarksManager } from '../components/MarksManager';
 import { TimetableManager } from '../components/TimetableManager';
 import { NoticeList } from '../components/NoticeList';
+import { StaffAttendance } from '../components/StaffAttendance';
 
 const clsLabel = (c: string, s: string) => `${c} - ${s}`;
 
@@ -102,6 +103,7 @@ export const TeacherDashboard: React.FC<{ initialTab?: string }> = ({ initialTab
     <div>
       {tab === 'overview' && <TeacherOverview />}
       {tab === 'attendance' && <AttendanceManager />}
+      {tab === 'myattendance' && <StaffAttendance selfView />}
       {tab === 'diary' && <DiaryManager teacherOnly />}
       {tab === 'marks' && <MarksManager />}
       {tab === 'timetable' && <TimetableManager />}

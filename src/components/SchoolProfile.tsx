@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
-import { Landmark, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { Landmark, MapPin, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../hooks/useFirestore';
 import { BankAccount } from '../types';
+import { getCurrentPosition, geoErrorMessage } from '../utils/geo';
 import {
   Badge, Card, CardHeader, Field, GhostButton, Modal,
   PrimaryButton, Spinner, TextInput, useConfirm,
@@ -65,6 +66,8 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [gpsMsg, setGpsMsg] = useState('');
 
   // Populate once when the school doc first loads (don't clobber user edits on realtime echoes).
   useEffect(() => {
@@ -105,6 +108,24 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
   const setField = <K extends keyof ProfileForm>(k: K, v: ProfileForm[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
     setSaved(false);
+  };
+
+  /** Fill lat/lng from the device GPS. Principal should stand at the school when pressing this. */
+  const captureLocation = async () => {
+    setGpsMsg('');
+    setLocating(true);
+    try {
+      const pos = await getCurrentPosition();
+      setField('lat', pos.coords.latitude.toFixed(6));
+      setField('lng', pos.coords.longitude.toFixed(6));
+      setGpsMsg(
+        `Location captured (±${Math.round(pos.coords.accuracy)} m accuracy). Set your radius and press Save.`
+      );
+    } catch (e) {
+      setGpsMsg(geoErrorMessage(e));
+    } finally {
+      setLocating(false);
+    }
   };
 
   const save = async () => {
@@ -254,8 +275,29 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
       </div>
 
       <div className="mt-6">
-        <h4 className="text-sm font-bold text-slate-800 mb-1">GPS location</h4>
-        <p className="text-xs text-slate-500 mb-3">Used for location-verified attendance. Radius is in metres.</p>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <h4 className="text-sm font-bold text-slate-800">GPS location</h4>
+            <p className="text-xs text-slate-500">Used for location-verified attendance. Radius is in metres.</p>
+          </div>
+          {canEdit && (
+            <GhostButton
+              onClick={captureLocation}
+              disabled={locating}
+              className="!px-3 !py-1.5 text-xs shrink-0"
+            >
+              <MapPin className="w-4 h-4" /> {locating ? 'Locating…' : 'Use current location'}
+            </GhostButton>
+          )}
+        </div>
+        {gpsMsg && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-xs text-indigo-800">
+            {gpsMsg}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 mb-3">
+          Tip: press "Use current location" while standing at the school gate for best accuracy, then set the radius and Save.
+        </p>
         <div className="grid grid-cols-3 gap-4">
           <Field label="Latitude">
             <TextInput type="number" step="any" value={form.lat} onChange={(e) => setField('lat', e.target.value)} disabled={!canEdit} placeholder="31.5204" />

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
   GraduationCap, UserCog, CalendarCheck, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
-  Menu,
+  Menu, MapPin,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
@@ -51,6 +51,7 @@ const NAV: Record<UserRole, NavItem[]> = {
   teacher: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'attendance', label: 'Mark Attendance', icon: <CalendarCheck className={iconCls} /> },
+    { id: 'myattendance', label: 'My Attendance', icon: <MapPin className={iconCls} /> },
     { id: 'diary', label: 'Diary', icon: <BookOpen className={iconCls} /> },
     { id: 'marks', label: 'Marks', icon: <Trophy className={iconCls} /> },
     { id: 'timetable', label: 'Timetable', icon: <Clock className={iconCls} /> },

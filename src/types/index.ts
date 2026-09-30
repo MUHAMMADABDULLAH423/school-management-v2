@@ -109,6 +109,10 @@ export interface AttendanceRecord {
   checkInTime?: string;
   markedBy: string;
   classSection?: string;
+  /** Self check-in location audit (staff). */
+  checkInLat?: number;
+  checkInLng?: number;
+  distanceM?: number;
 }
 
 export interface FeeVoucher {

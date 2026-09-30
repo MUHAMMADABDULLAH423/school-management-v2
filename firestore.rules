@@ -102,10 +102,16 @@ service cloud.firestore {
         (resource.data.type == 'student' && parentOfStudent(resource.data.studentId))
       );
       allow create: if isAdmin() || isTeacher() ||
-        // staff may mark their OWN check-in
+        // staff may check THEMSELVES in: own staff record only, Present only.
+        // (userDoc().staffId links the login to the staff record.)
         (isStaffRole() && request.resource.data.type == 'staff'
-          && request.resource.data.staffId == request.auth.uid);
-      allow update: if isAdmin() || isTeacher();
+          && request.resource.data.status == 'Present'
+          && request.resource.data.staffId == userDoc().staffId);
+      allow update: if isAdmin() || isTeacher() ||
+        (isStaffRole() && request.resource.data.type == 'staff'
+          && request.resource.data.status == 'Present'
+          && request.resource.data.staffId == userDoc().staffId
+          && resource.data.staffId == userDoc().staffId);
       allow delete: if role() == 'admin';
     }
 

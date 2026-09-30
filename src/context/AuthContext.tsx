@@ -3,6 +3,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
@@ -19,6 +20,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; firstLogin?: boolean }>;
   logout: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<boolean>;
+  /** Sends a Firebase password-reset email. Returns ok:false with a message on failure. */
+  resetPassword: (email: string) => Promise<{ ok: boolean; error?: string }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -212,12 +215,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(p);
   }, [firebaseUser, loadProfile]);
 
+  const resetPassword = useCallback(async (email: string) => {
+    const addr = email.trim();
+    if (!addr) return { ok: false, error: 'Please enter your email address first.' };
+    try {
+      await sendPasswordResetEmail(auth, addr);
+      return { ok: true };
+    } catch (err: any) {
+      const code = err?.code || '';
+      // Don't reveal whether the email exists — same message either way.
+      if (code.includes('user-not-found')) return { ok: true };
+      if (code.includes('invalid-email')) return { ok: false, error: 'That email address looks invalid.' };
+      if (code.includes('too-many-requests')) return { ok: false, error: 'Too many requests. Please wait a while and try again.' };
+      return { ok: false, error: 'Could not send the reset email. Check your connection and try again.' };
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
         firebaseUser, currentUser, isLoading,
         firebaseReady: isFirebaseConfigured,
-        lockoutRemaining, login, logout, changePassword, refreshProfile,
+        lockoutRemaining, login, logout, changePassword, resetPassword, refreshProfile,
       }}
     >
       {children}

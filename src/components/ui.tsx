@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, X, AlertTriangle } from 'lucide-react';
+import { Search, X, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 
 /* ---------- Layout primitives ---------- */
 
@@ -82,6 +82,29 @@ export const TextInput = React.forwardRef<
   React.InputHTMLAttributes<HTMLInputElement>
 >((props, ref) => <input ref={ref} {...props} className={`${inputCls} ${props.className || ''}`} />);
 TextInput.displayName = 'TextInput';
+
+/** Password input with a show/hide eye toggle. */
+export const PasswordInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        {...props}
+        type={show ? 'text' : 'password'}
+        className={`${inputCls} pr-10 ${props.className || ''}`}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700"
+        aria-label={show ? 'Hide password' : 'Show password'}
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+};
 
 export const Select = React.forwardRef<
   HTMLSelectElement,

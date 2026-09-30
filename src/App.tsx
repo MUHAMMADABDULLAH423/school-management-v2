@@ -20,7 +20,7 @@ import { seedDemoData } from './services/seed';
 import { UserRole } from './types';
 import {
   Card, Modal, Field, TextInput, PrimaryButton, Spinner, EmptyState,
-  Avatar,
+  Avatar, PasswordInput,
 } from './components/ui';
 
 const iconCls = 'w-4 h-4';
@@ -98,10 +98,10 @@ const FirstLoginGate: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           Welcome, <b>{currentUser?.name}</b>. This is your first sign-in — please set a new password to continue.
         </p>
         <Field label="New password">
-          <TextInput type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Min. 6 characters" />
+          <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Min. 6 characters" />
         </Field>
         <Field label="Confirm new password">
-          <TextInput type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="Repeat password" />
+          <PasswordInput value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="Repeat password" />
         </Field>
         {err && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{err}</div>}
         <div className="flex gap-2 justify-end">

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { LogIn, Mail, Lock, AlertCircle, GraduationCap, ShieldAlert, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Card, Field, TextInput, PrimaryButton } from './ui';
+import { Card, Field, TextInput, PrimaryButton, PasswordInput } from './ui';
 
 const formatCountdown = (secs: number): string => {
   const m = Math.floor(secs / 60);
@@ -169,8 +169,7 @@ export const Login: React.FC = () => {
             <Field label="Password">
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <TextInput
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

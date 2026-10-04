@@ -10,7 +10,7 @@ import {
   addDoc, collection, doc, updateDoc, writeBatch,
 } from 'firebase/firestore';
 import {
-  Receipt, Plus, Eye, Wallet, Banknote, AlertCircle, CircleDollarSign,
+  Receipt, Plus, Eye, Wallet, Banknote, AlertCircle, CircleDollarSign, MessageCircle,
 } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -20,7 +20,7 @@ import {
   Card, CardHeader, Modal, Field, TextInput, PrimaryButton, GhostButton,
   Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
 } from './ui';
-import FeeVoucherPrint from './FeeVoucherPrint';
+import FeeVoucherPrint, { buildWaLink } from './FeeVoucherPrint';
 
 const statusTone = (s: FeeStatus): 'green' | 'amber' | 'blue' | 'red' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'amber' : s === 'Pending' ? 'blue' : 'red';
@@ -303,6 +303,18 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                     >
                       <Eye className="w-4 h-4" />
                     </button>
+                    {s && (
+                      <a
+                        href={buildWaLink(f, s, school?.name || '')}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-block p-1.5 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600"
+                        title="WhatsApp Reminder"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </a>
+                    )}
                     {!readOnly && (f.dueAmount || 0) > 0 && (
                       <button
                         type="button"

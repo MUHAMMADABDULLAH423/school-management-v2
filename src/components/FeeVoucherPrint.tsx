@@ -9,7 +9,7 @@
  * The action bar here is also print:hidden; the copies render cleanly.
  */
 import React from 'react';
-import { Printer, MessageCircle, X } from 'lucide-react';
+import { Printer, X } from 'lucide-react';
 import { FeeVoucher, Student, SchoolProfile, formatPKR } from '../types';
 import { Badge } from './ui';
 
@@ -24,13 +24,20 @@ const statusTone = (s: string): 'green' | 'amber' | 'blue' | 'red' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'amber' : s === 'Pending' ? 'blue' : 'red';
 
 /** Normalize a Pakistani mobile number for wa.me links. */
-function waNumber(raw: string): string {
+export function waNumber(raw: string): string {
   const d = (raw || '').replace(/\D/g, '');
   if (!d) return '';
   if (d.startsWith('92')) return d;
   if (d.startsWith('0')) return `92${d.slice(1)}`;
   if (d.length === 10 && d.startsWith('3')) return `92${d}`;
   return d;
+}
+
+/** Build the WhatsApp fee-reminder link for a voucher (shared with the fees table). */
+export function buildWaLink(voucher: FeeVoucher, student: Student, schoolName: string): string {
+  const bankLine = voucher.bankSnapshot || '—';
+  const waMsg = `Dear Parent, fee voucher ${voucher.voucherNumber} for ${student.name} (${student.class}-${student.section}), month ${voucher.month}:\nTotal: ${formatPKR(voucher.totalAmount)}\nPaid: ${formatPKR(voucher.paidAmount)}\nDue: ${formatPKR(voucher.dueAmount)}\nPlease pay by ${voucher.dueDate} at: ${bankLine}\n— ${schoolName}`;
+  return `https://wa.me/${waNumber(student.parentWhatsApp || student.parentPhone)}?text=${encodeURIComponent(waMsg)}`;
 }
 
 const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose }) => {
@@ -44,9 +51,6 @@ const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose })
     { label: 'Exam Fee', value: voucher.examFee },
     { label: 'Late Fine', value: voucher.lateFine },
   ].filter((h) => h.value > 0);
-
-  const waMsg = `Dear Parent, fee voucher ${voucher.voucherNumber} for ${student.name} (${student.class}-${student.section}), month ${voucher.month}:\nTotal: ${formatPKR(voucher.totalAmount)}\nPaid: ${formatPKR(voucher.paidAmount)}\nDue: ${formatPKR(voucher.dueAmount)}\nPlease pay by ${voucher.dueDate} at: ${bankLine}\n— ${schoolName}`;
-  const waLink = `https://wa.me/${waNumber(student.parentWhatsApp || student.parentPhone)}?text=${encodeURIComponent(waMsg)}`;
 
   const Copy: React.FC<{ copyName: string }> = ({ copyName }) => (
     <div className="border-2 border-slate-800 bg-white p-5 print:break-inside-avoid">
@@ -141,14 +145,6 @@ const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose })
           Fee Voucher <span className="font-mono text-slate-300">{voucher.voucherNumber}</span>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={waLink}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg"
-          >
-            <MessageCircle className="w-4 h-4" /> WhatsApp Reminder
-          </a>
           <button
             type="button"
             onClick={() => window.print()}

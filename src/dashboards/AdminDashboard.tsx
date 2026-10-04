@@ -7,7 +7,7 @@ import { useCollection } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
 import {
   AttendanceRecord, FeeVoucher, HolidayItem, StaffMember, Student,
-  formatPKR, todayStr,
+  formatPKR, todayStr, defaultDateFilter,
 } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Tabs,
@@ -20,6 +20,7 @@ import { TimetableManager } from '../components/TimetableManager';
 import { NoticesManager } from '../components/NoticesManager';
 import { HolidaysManager } from '../components/HolidaysManager';
 import { OverviewKpiCards } from '../components/OverviewKpiCards';
+import { DateFilter } from '../components/DateFilter';
 // Built by sibling agents — imported normally:
 import { StaffManager } from '../components/StaffManager';
 import StudentAdmission from '../components/StudentAdmission';
@@ -32,8 +33,22 @@ const attTone = (s: string): 'green' | 'red' | 'amber' | 'blue' | 'violet' =>
   s === 'Present' ? 'green' : s === 'Absent' ? 'red' : s === 'Late' ? 'amber'
     : s === 'HalfDay' ? 'blue' : 'violet';
 
-/** Admin overview: KPIs + quick lists. */
+/** Unique YYYY-MM months between two YYYY-MM-DD dates (inclusive). */
+const monthsBetween = (start: string, end: string): string[] => {
+  const out: string[] = [];
+  let [y, m] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+};
+
+/** Admin overview: KPIs + date filter + quick lists. */
 const AdminOverview: React.FC = () => {
+  const [filter, setFilter] = useState(defaultDateFilter());
   const { data: students } = useCollection<Student>('students');
   const { data: staff } = useCollection<StaffMember>('staff');
   const { data: attendance } = useCollection<AttendanceRecord>('attendance');
@@ -42,14 +57,23 @@ const AdminOverview: React.FC = () => {
 
   const today = todayStr();
 
-  const todayAtt = attendance.filter((a) => a.type === 'student' && a.date === today);
+  // Effective date/months driven by the date filter (like the principal overview)
+  const attDate = filter.mode === 'single' ? filter.singleDate
+    : filter.mode === 'range' ? filter.endDate
+    : today;
+  const feeMonths = filter.mode === 'months' ? filter.selectedMonths
+    : filter.mode === 'single' ? [filter.singleDate.slice(0, 7)]
+    : monthsBetween(filter.startDate, filter.endDate);
+
+  const dayAtt = attendance.filter((a) => a.type === 'student' && a.date === attDate);
 
   const pendingFees = fees.filter((f) => f.status !== 'Paid');
 
-  const absentToday = todayAtt
+  const absentList = dayAtt
     .filter((a) => a.status === 'Absent')
     .slice(0, 5);
   const nameOf = (id?: string) => students.find((s) => s.id === id);
+  const absentTitle = attDate === today ? 'Absent Today' : `Absent ${attDate}`;
 
   const pendingVouchers = pendingFees
     .slice()
@@ -63,17 +87,32 @@ const AdminOverview: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <OverviewKpiCards students={students} staff={staff} attendance={attendance} fees={fees} />
+      {/* KPI cards (left) + date filter (right, sticky) — like the principal overview */}
+      <div className="grid gap-4 lg:grid-cols-3 items-start">
+        <div className="lg:col-span-2">
+          <OverviewKpiCards
+            students={students}
+            staff={staff}
+            attendance={attendance}
+            fees={fees}
+            attendanceDate={attDate}
+            feeMonths={feeMonths}
+          />
+        </div>
+        <div className="lg:sticky lg:top-[4.5rem]">
+          <DateFilter filter={filter} onChange={setFilter} compact />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card>
-          <CardHeader title="Absent Today" pill={`${absentToday.length}`} />
+          <CardHeader title={absentTitle} pill={`${absentList.length}`} />
           <div className="p-4">
-            {absentToday.length === 0 ? (
-              <EmptyState title="None absent today" />
+            {absentList.length === 0 ? (
+              <EmptyState title={attDate === today ? 'None absent today' : `None absent on ${attDate}`} />
             ) : (
               <div className="space-y-2">
-                {absentToday.map((a) => {
+                {absentList.map((a) => {
                   const st = nameOf(a.studentId);
                   return (
                     <div key={a.id} className="flex items-center gap-2.5">

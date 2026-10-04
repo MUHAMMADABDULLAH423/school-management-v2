@@ -107,14 +107,18 @@ const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose })
       </table>
 
       {voucher.receiptNo && (
-        <div className="text-xs text-slate-600 mb-2">
-          Receipt: <span className="font-mono">{voucher.receiptNo}</span>
-          {voucher.paidDate ? ` · Paid on ${voucher.paidDate}` : ''}
-          {voucher.paymentChannel === 'bank'
-            ? ` · Via Bank${voucher.paymentBank ? ` (${voucher.paymentBank})` : ''}`
-            : voucher.paymentChannel === 'cash'
-              ? ' · Via Cash (Counter)'
-              : ''}
+        <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs print:break-inside-avoid">
+          <div className="text-slate-600">
+            Receipt: <span className="font-mono font-semibold text-slate-800">{voucher.receiptNo}</span>
+            {voucher.paidDate ? <span> · Paid on {voucher.paidDate}</span> : null}
+          </div>
+          {voucher.paymentChannel && (
+            <div className="mt-1 font-extrabold text-slate-900">
+              Payment Channel: {voucher.paymentChannel === 'bank'
+                ? `Bank${voucher.paymentBank ? ` — ${voucher.paymentBank}` : ''}`
+                : 'Cash on Counter'}
+            </div>
+          )}
         </div>
       )}
 

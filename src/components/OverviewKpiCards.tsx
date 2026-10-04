@@ -4,40 +4,48 @@ import {
   Student, StaffMember, AttendanceRecord, FeeVoucher,
   todayStr, formatPKR,
 } from '../types';
+import { monthLabel } from './DateFilter';
 
 /**
  * The three rich overview KPI cards (students / staff / fee collection),
  * shared by the admin and principal portals so both show the same cards.
+ *
+ * Optional overrides let a page drive the cards from a date filter:
+ * - attendanceDate: YYYY-MM-DD used for the attendance breakdowns (default: today)
+ * - feeMonths: YYYY-MM list used for fee collection (default: current month)
  */
 export const OverviewKpiCards: React.FC<{
   students: Student[];
   staff: StaffMember[];
   attendance: AttendanceRecord[];
   fees: FeeVoucher[];
-}> = ({ students, staff, attendance, fees }) => {
+  attendanceDate?: string;
+  feeMonths?: string[];
+}> = ({ students, staff, attendance, fees, attendanceDate, feeMonths }) => {
   const today = todayStr();
-  const monthKey = today.slice(0, 7);
+  const attDate = attendanceDate || today;
+  const months = feeMonths && feeMonths.length > 0 ? feeMonths : [today.slice(0, 7)];
   const activeStudents = students.filter((s) => s.isActive);
   const activeStaff = staff.filter((s) => s.isActive);
 
-  // Today's student attendance breakdown
-  const todayAtt = attendance.filter((a) => a.type === 'student' && a.date === today);
-  const stuPresent = todayAtt.filter((a) => a.status === 'Present').length;
-  const stuAbsent = todayAtt.filter((a) => a.status === 'Absent').length;
-  const stuLeaveLate = todayAtt.filter(
+  // Student attendance breakdown for the selected date
+  const dayAtt = attendance.filter((a) => a.type === 'student' && a.date === attDate);
+  const stuPresent = dayAtt.filter((a) => a.status === 'Present').length;
+  const stuAbsent = dayAtt.filter((a) => a.status === 'Absent').length;
+  const stuLeaveLate = dayAtt.filter(
     (a) => a.status === 'Leave' || a.status === 'Late' || a.status === 'HalfDay'
   ).length;
 
-  // Today's staff attendance breakdown
-  const todayStaffAtt = attendance.filter((a) => a.type === 'staff' && a.date === today);
-  const staffPresent = todayStaffAtt.filter((a) => a.status === 'Present').length;
-  const staffAbsentLeave = todayStaffAtt.filter((a) => a.status !== 'Present').length;
-  const staffPresentPct = todayStaffAtt.length > 0
-    ? Math.round((staffPresent / todayStaffAtt.length) * 100)
+  // Staff attendance breakdown for the selected date
+  const dayStaffAtt = attendance.filter((a) => a.type === 'staff' && a.date === attDate);
+  const staffPresent = dayStaffAtt.filter((a) => a.status === 'Present').length;
+  const staffAbsentLeave = dayStaffAtt.filter((a) => a.status !== 'Present').length;
+  const staffPresentPct = dayStaffAtt.length > 0
+    ? Math.round((staffPresent / dayStaffAtt.length) * 100)
     : 0;
 
-  // Fee collection for the current month
-  const monthVouchers = fees.filter((f) => f.month === monthKey);
+  // Fee collection for the selected month(s)
+  const monthVouchers = fees.filter((f) => months.includes(f.month));
   const feeCollected = monthVouchers.reduce((s, f) => s + (Number(f.paidAmount) || 0), 0);
   const feePending = monthVouchers
     .filter((f) => f.status !== 'Paid')
@@ -45,9 +53,14 @@ export const OverviewKpiCards: React.FC<{
   const feeTotal = feeCollected + feePending;
   const feePct = feeTotal > 0 ? Math.round((feeCollected / feeTotal) * 100) : 0;
 
+  const attPill = attDate === today ? 'Today' : attDate;
+  const feePill = months.length === 1
+    ? (months[0] === today.slice(0, 7) ? 'This Month' : monthLabel(months[0]))
+    : `${months.length} Months`;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* ---- Total students with today's attendance breakdown ---- */}
+      {/* ---- Total students with attendance breakdown for the selected date ---- */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -56,7 +69,7 @@ export const OverviewKpiCards: React.FC<{
             </div>
             <div className="text-[11px] font-bold tracking-wide text-slate-500">TOTAL STUDENTS</div>
           </div>
-          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">Today</span>
+          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">{attPill}</span>
         </div>
         <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {activeStudents.length.toLocaleString()}
@@ -77,7 +90,7 @@ export const OverviewKpiCards: React.FC<{
         </div>
       </div>
 
-      {/* ---- Teachers & staff with today's attendance ---- */}
+      {/* ---- Teachers & staff with attendance for the selected date ---- */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -93,7 +106,7 @@ export const OverviewKpiCards: React.FC<{
         </div>
         <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="rounded-xl bg-blue-50 px-2 py-2 text-center">
-            <div className="text-[10px] font-bold text-blue-700">PRESENT TODAY</div>
+            <div className="text-[10px] font-bold text-blue-700">{attDate === today ? 'PRESENT TODAY' : 'PRESENT'}</div>
             <div className="text-base font-extrabold text-blue-800 tabular-nums">
               {staffPresent} ({staffPresentPct}%)
             </div>
@@ -105,7 +118,7 @@ export const OverviewKpiCards: React.FC<{
         </div>
       </div>
 
-      {/* ---- Fee collection this month ---- */}
+      {/* ---- Fee collection for the selected month(s) ---- */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -114,7 +127,7 @@ export const OverviewKpiCards: React.FC<{
             </div>
             <div className="text-[11px] font-bold tracking-wide text-slate-500">FEE COLLECTION</div>
           </div>
-          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">This Month</span>
+          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">{feePill}</span>
         </div>
         <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {formatPKR(feeCollected)}

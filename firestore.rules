@@ -137,6 +137,13 @@ service cloud.firestore {
       allow create, update, delete: if role() == 'admin';
     }
 
+    // ---- EXAM TYPES (teacher-addable exam names for marks entry) ----
+    match /examTypes/{typeId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin() || isTeacher();
+      allow update, delete: if role() == 'admin';
+    }
+
     match /timetable/{slotId} {
       allow get, list: if isSignedIn();
       allow create, update, delete: if role() == 'admin';

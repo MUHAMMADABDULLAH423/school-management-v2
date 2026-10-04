@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Plus } from 'lucide-react';
 import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
-import { ClassSection, ExamResult, Student, gradeFor, isOwnChild, todayStr } from '../types';
+import { ClassSection, ExamResult, ExamTypeItem, Student, gradeFor, isOwnChild, todayStr } from '../types';
 import {
-  Avatar, Badge, Card, CardHeader, EmptyState, Field, PrimaryButton, Select,
+  Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal, PrimaryButton, Select,
   Spinner, Table, TextInput,
 } from './ui';
 
@@ -87,6 +87,7 @@ export const MarksManager: React.FC = () => {
   const { data: students, loading: loadingStudents } = useCollection<Student>('students');
   const { data: classes } = useCollection<ClassSection>('classes');
   const { data: results, loading: loadingResults } = useCollection<ExamResult>('results');
+  const { data: examTypeDocs } = useCollection<ExamTypeItem>('examTypes');
 
   const [examType, setExamType] = useState(EXAM_TYPES[0]);
   const [subject, setSubject] = useState('');
@@ -96,8 +97,50 @@ export const MarksManager: React.FC = () => {
   const [totals, setTotals] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  // Add-new-exam-type modal state
+  const [showAddExam, setShowAddExam] = useState(false);
+  const [newExamName, setNewExamName] = useState('');
+  const [addingExam, setAddingExam] = useState(false);
 
   const canWrite = role === 'teacher' || role === 'admin';
+
+  /** Default exam types + teacher-added ones from Firestore (deduped). */
+  const allExamTypes = useMemo(() => {
+    const merged = [...EXAM_TYPES];
+    examTypeDocs.forEach((d) => {
+      const name = (d.name || '').trim();
+      if (name && !merged.some((m) => m.toLowerCase() === name.toLowerCase())) merged.push(name);
+    });
+    return merged;
+  }, [examTypeDocs]);
+
+  const addExamType = async () => {
+    const name = newExamName.trim();
+    if (!name || !currentUser || addingExam) return;
+    const existing = allExamTypes.find((t) => t.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setExamType(existing);
+      setShowAddExam(false);
+      setNewExamName('');
+      return;
+    }
+    setAddingExam(true);
+    try {
+      await addDoc(collection(db, 'examTypes'), {
+        name, createdBy: currentUser.name, createdAt: new Date().toISOString(),
+      });
+      await logAudit(currentUser.uid, currentUser.name, 'Added exam type', name);
+      setExamType(name);
+      setShowAddExam(false);
+      setNewExamName('');
+      setMsg(`Exam type "${name}" added.`);
+    } catch (e: any) {
+      setMsg(e?.message || 'Failed to add exam type.');
+      setShowAddExam(false);
+    } finally {
+      setAddingExam(false);
+    }
+  };
 
   const options = useMemo(() => {
     if (classes.length > 0) {
@@ -176,9 +219,19 @@ export const MarksManager: React.FC = () => {
       <div className="p-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <Field label="Exam">
-            <Select value={examType} onChange={(e) => { setExamType(e.target.value); setMsg(''); }}>
-              {EXAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
+            <div className="flex gap-2">
+              <Select value={examType} onChange={(e) => { setExamType(e.target.value); setMsg(''); }} className="flex-1">
+                {allExamTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+              <button
+                type="button"
+                onClick={() => { setNewExamName(''); setShowAddExam(true); }}
+                className="shrink-0 inline-flex items-center gap-1 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-bold hover:bg-indigo-100 border border-indigo-200"
+                title="Add new exam type"
+              >
+                <Plus className="w-4 h-4" /> New
+              </button>
+            </div>
           </Field>
           <Field label="Subject">
             <TextInput value={subject} onChange={(e) => { setSubject(e.target.value); setMsg(''); }} placeholder="e.g. Mathematics" />
@@ -242,6 +295,27 @@ export const MarksManager: React.FC = () => {
           </>
         )}
       </div>
+
+      {showAddExam && (
+        <Modal title="Add Exam Type" subtitle="The new exam will appear in the dropdown for all teachers." onClose={() => setShowAddExam(false)}>
+          <div className="p-5 space-y-4">
+            <Field label="Exam name">
+              <TextInput
+                value={newExamName}
+                onChange={(e) => setNewExamName(e.target.value)}
+                placeholder="e.g. Quiz 1, Weekly Test"
+                onKeyDown={(e) => { if (e.key === 'Enter') addExamType(); }}
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <GhostButton type="button" onClick={() => setShowAddExam(false)}>Cancel</GhostButton>
+              <PrimaryButton type="button" onClick={addExamType} disabled={!newExamName.trim() || addingExam}>
+                <Plus className="w-4 h-4" /> {addingExam ? 'Adding…' : 'Add Exam'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 };

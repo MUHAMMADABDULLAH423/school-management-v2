@@ -165,6 +165,14 @@ export interface Exam {
   academicYear: string;
 }
 
+/** Teacher-addable exam type (e.g. "Quiz 1") — shown in the Marks entry exam dropdown. */
+export interface ExamTypeItem {
+  id: string;
+  name: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
 export interface TimetableSlot {
   id: string;
   classSection: string;

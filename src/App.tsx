@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
   GraduationCap, UserCog, CalendarCheck, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
-  Menu, MapPin,
+  Menu, MapPin, Layers,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
@@ -31,6 +31,7 @@ const NAV: Record<UserRole, NavItem[]> = {
   principal: [
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
+    { id: 'classes', label: 'Classes', icon: <Layers className={iconCls} /> },
     { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
@@ -40,6 +41,7 @@ const NAV: Record<UserRole, NavItem[]> = {
   admin: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'students', label: 'Students', icon: <GraduationCap className={iconCls} /> },
+    { id: 'classes', label: 'Classes', icon: <Layers className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
     { id: 'fees', label: 'Fees', icon: <BadgeDollarSign className={iconCls} /> },
     { id: 'attendance', label: 'Attendance', icon: <CalendarCheck className={iconCls} /> },

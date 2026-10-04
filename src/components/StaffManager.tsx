@@ -4,7 +4,7 @@ import { Pencil, Plus, UserCheck, UserX, Eye } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
-import { StaffMember, StaffRole, pendingUserDocId, formatPKR } from '../types';
+import { StaffMember, StaffRole, ClassSection, pendingUserDocId, formatPKR } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal,
   PrimaryButton, SearchInput, Select, Spinner, Table, TextInput, useConfirm,
@@ -25,7 +25,7 @@ interface StaffForm {
   department: string;
   qualification: string;
   subjectsCsv: string;
-  classesCsv: string;
+  assignedClasses: string[];
   salary: string;
   joiningDate: string;
   photo: string;
@@ -34,7 +34,7 @@ interface StaffForm {
 const emptyForm = (): StaffForm => ({
   name: '', email: '', phone: '', role: 'teacher',
   designation: '', department: '', qualification: '',
-  subjectsCsv: '', classesCsv: '', salary: '', joiningDate: '', photo: '',
+  subjectsCsv: '', assignedClasses: [], salary: '', joiningDate: '', photo: '',
 });
 
 const csvToArr = (s: string): string[] =>
@@ -43,6 +43,7 @@ const csvToArr = (s: string): string[] =>
 export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = false }) => {
   const { currentUser } = useAuth();
   const { data: staff, loading } = useCollection<StaffMember>('staff');
+  const { data: classDocs } = useCollection<ClassSection>('classes');
   const { ask, dialog } = useConfirm();
 
   const [search, setSearch] = useState('');
@@ -70,6 +71,24 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
     } catch {
       /* audit must never break the UI */
     }
+  };
+
+  /** Class labels from the Classes menu, plus any legacy free-text values on the record. */
+  const classOptions = useMemo(() => {
+    const labels = classDocs.map((c) => `${c.name} - ${c.section}`);
+    form.assignedClasses.forEach((v) => {
+      if (v && !labels.some((l) => l.toLowerCase() === v.toLowerCase())) labels.push(v);
+    });
+    return labels.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [classDocs, form.assignedClasses]);
+
+  const toggleAssignedClass = (label: string) => {
+    setForm((f) => ({
+      ...f,
+      assignedClasses: f.assignedClasses.includes(label)
+        ? f.assignedClasses.filter((c) => c !== label)
+        : [...f.assignedClasses, label],
+    }));
   };
 
   const filtered = useMemo(() => {
@@ -107,7 +126,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
       department: m.department || '',
       qualification: m.qualification || '',
       subjectsCsv: (m.subjects || []).join(', '),
-      classesCsv: (m.assignedClasses || []).join(', '),
+      assignedClasses: [...(m.assignedClasses || [])],
       salary: m.salary != null ? String(m.salary) : '',
       joiningDate: m.joiningDate || '',
       photo: m.photo || '',
@@ -140,7 +159,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
       }
 
       const subjects = csvToArr(form.subjectsCsv);
-      const assignedClasses = csvToArr(form.classesCsv);
+      const assignedClasses = form.assignedClasses;
       const salaryNum = form.salary.trim() === '' ? undefined : Number(form.salary);
 
       const staffPayload: Record<string, unknown> = {
@@ -449,12 +468,23 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                 placeholder="e.g. Mathematics, Physics"
               />
             </Field>
-            <Field label="Assigned classes (comma-separated)">
-              <TextInput
-                value={form.classesCsv}
-                onChange={(e) => setField('classesCsv', e.target.value)}
-                placeholder="e.g. 10-A, 9-B"
-              />
+            <Field label="Assigned classes">
+              <div className="max-h-44 overflow-y-auto nice-scroll rounded-lg border border-slate-200 p-2 space-y-0.5 bg-white">
+                {classOptions.length === 0 && (
+                  <p className="text-xs text-slate-400 px-2 py-1.5">No classes yet — add them from the Classes menu first.</p>
+                )}
+                {classOptions.map((c) => (
+                  <label key={c} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.assignedClasses.includes(c)}
+                      onChange={() => toggleAssignedClass(c)}
+                      className="w-4 h-4 accent-indigo-600 shrink-0"
+                    />
+                    <span className="truncate">{c}</span>
+                  </label>
+                ))}
+              </div>
             </Field>
             <Field label="Joining date">
               <TextInput

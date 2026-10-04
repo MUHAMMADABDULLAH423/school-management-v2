@@ -92,7 +92,7 @@ service cloud.firestore {
 
     match /classes/{classId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if role() == 'admin';
+      allow create, update, delete: if isAdmin();
     }
 
     // ---- ATTENDANCE ----

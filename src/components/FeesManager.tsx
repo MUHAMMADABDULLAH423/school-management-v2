@@ -295,36 +295,38 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => setPrintFor(f)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
-                      title="View / Print"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    {s && (
-                      <a
-                        href={buildWaLink(f, s, school?.name || '')}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-block p-1.5 rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-600"
-                        title="WhatsApp Reminder"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </a>
-                    )}
-                    {!readOnly && (f.dueAmount || 0) > 0 && (
+                    <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => openCollect(f)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-emerald-600"
-                        title="Collect payment"
+                        onClick={() => setPrintFor(f)}
+                        className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                        title="View / Print"
                       >
-                        <Wallet className="w-4 h-4" />
+                        <Eye className="w-4 h-4" />
                       </button>
-                    )}
+                      {s && (f.dueAmount || 0) > 0 && (
+                        <a
+                          href={buildWaLink(f, s, school?.name || '')}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          title="WhatsApp Reminder"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </a>
+                      )}
+                      {!readOnly && (f.dueAmount || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openCollect(f)}
+                          className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100"
+                          title="Collect payment"
+                        >
+                          <Wallet className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

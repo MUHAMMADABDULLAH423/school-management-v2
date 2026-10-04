@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
-import { Pencil, Plus, UserCheck, UserX, Eye } from 'lucide-react';
+import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
@@ -89,6 +89,58 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
         ? f.assignedClasses.filter((c) => c !== label)
         : [...f.assignedClasses, label],
     }));
+  };
+
+  /** Collapsed multi-select dropdown for assigned classes. */
+  const ClassMultiSelect: React.FC = () => {
+    const [open, setOpen] = useState(false);
+    const sel = form.assignedClasses;
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-slate-300"
+        >
+          <span className="truncate">
+            {sel.length === 0
+              ? 'Select classes…'
+              : `${sel.length} selected${sel.length <= 2 ? `: ${sel.join(', ')}` : ''}`}
+          </span>
+          <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
+            <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-52 overflow-y-auto nice-scroll p-1.5">
+              {classOptions.length === 0 && (
+                <p className="text-xs text-slate-400 px-2 py-1.5">No classes yet — add them from the Classes menu first.</p>
+              )}
+              {classOptions.map((c) => (
+                <label key={c} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={sel.includes(c)}
+                    onChange={() => toggleAssignedClass(c)}
+                    className="w-4 h-4 accent-indigo-600 shrink-0"
+                  />
+                  <span className="truncate">{c}</span>
+                </label>
+              ))}
+              {sel.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="w-full mt-1 px-2 py-1.5 rounded-md bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
 
   const filtered = useMemo(() => {
@@ -469,22 +521,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
               />
             </Field>
             <Field label="Assigned classes">
-              <div className="max-h-44 overflow-y-auto nice-scroll rounded-lg border border-slate-200 p-2 space-y-0.5 bg-white">
-                {classOptions.length === 0 && (
-                  <p className="text-xs text-slate-400 px-2 py-1.5">No classes yet — add them from the Classes menu first.</p>
-                )}
-                {classOptions.map((c) => (
-                  <label key={c} className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={form.assignedClasses.includes(c)}
-                      onChange={() => toggleAssignedClass(c)}
-                      className="w-4 h-4 accent-indigo-600 shrink-0"
-                    />
-                    <span className="truncate">{c}</span>
-                  </label>
-                ))}
-              </div>
+              <ClassMultiSelect />
             </Field>
             <Field label="Joining date">
               <TextInput

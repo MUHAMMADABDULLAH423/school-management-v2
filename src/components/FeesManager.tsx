@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { FeeVoucher, FeeStatus, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, PrimaryButton, GhostButton,
-  Badge, SearchInput, Table, EmptyState, Spinner, StatCard,
+  Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
 } from './ui';
 import FeeVoucherPrint from './FeeVoucherPrint';
 
@@ -67,6 +67,8 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   // Collect-payment form state
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(todayStr());
+  /** 'cash' = cash on counter, otherwise a school bank account id */
+  const [payChannel, setPayChannel] = useState('cash');
 
   const studentsById = useMemo(() => {
     const m = new Map<string, Student>();
@@ -107,6 +109,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
     setCollectFor(v);
     setPayAmount(String(v.dueAmount || 0));
     setPayDate(todayStr());
+    setPayChannel('cash');
     setError('');
   };
 
@@ -124,9 +127,13 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
       const newDue = Math.max(0, (collectFor.totalAmount || 0) - newPaid);
       const status: FeeStatus = newDue <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Pending';
       const receiptNo = collectFor.receiptNo || `RCPT-${Date.now().toString().slice(-8)}`;
+      const viaBank = payChannel !== 'cash';
+      const bank = viaBank ? (school?.bankAccounts || []).find((b) => b.id === payChannel) : undefined;
       await updateDoc(doc(db, 'fees', collectFor.id), {
         paidAmount: newPaid, dueAmount: newDue, status,
         paidDate: payDate, receiptNo,
+        paymentChannel: viaBank ? 'bank' : 'cash',
+        paymentBank: bank ? `${bank.bankName} — ${bank.accountNumber}` : '',
       });
 
       // Recompute the student's fee status across ALL their vouchers
@@ -145,7 +152,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
       if (st) await updateDoc(doc(db, 'students', st.id), { feeStatus });
 
       await auditLog(currentUser.uid, currentUser.name, 'Fee collected',
-        `Collected ${formatPKR(amount)} against ${collectFor.voucherNumber} (${st?.name || ''}); receipt ${receiptNo}`);
+        `Collected ${formatPKR(amount)} against ${collectFor.voucherNumber} (${st?.name || ''}); receipt ${receiptNo}; via ${viaBank ? `bank${bank ? ` (${bank.bankName})` : ''}` : 'cash (counter)'}`);
       setCollectFor(null);
     } catch (e: any) {
       setError(e?.message || 'Payment failed. Please try again.');
@@ -260,7 +267,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
         ) : filteredFees.length === 0 ? (
           <EmptyState title="No vouchers" hint={readOnly ? 'No vouchers for this month.' : 'Generate vouchers for this month to begin.'} />
         ) : (
-          <Table head={['Voucher', 'Student', 'Class', 'Month', 'Total', 'Paid', 'Due', 'Status', '']}>
+          <Table head={['Voucher', 'Student', 'Class', 'Month', 'Total', 'Paid', 'Due', 'Status', 'Via', '']}>
             {filteredFees.map((f) => {
               const s = studentsById.get(f.studentId);
               return (
@@ -278,6 +285,15 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                   <td className="px-3 py-2 text-emerald-700 whitespace-nowrap">{formatPKR(f.paidAmount)}</td>
                   <td className="px-3 py-2 text-rose-700 font-semibold whitespace-nowrap">{formatPKR(f.dueAmount)}</td>
                   <td className="px-3 py-2"><Badge tone={statusTone(f.status)}>{f.status}</Badge></td>
+                  <td className="px-3 py-2 whitespace-nowrap" title={f.paymentBank || ''}>
+                    {f.paymentChannel ? (
+                      <Badge tone={f.paymentChannel === 'bank' ? 'blue' : 'amber'}>
+                        {f.paymentChannel === 'bank' ? 'Bank' : 'Cash'}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button
                       type="button"
@@ -355,6 +371,18 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
             </Field>
             <Field label="Payment date">
               <TextInput type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Payment channel">
+              <Select value={payChannel} onChange={(e) => setPayChannel(e.target.value)}>
+                <option value="cash">Cash on counter</option>
+                {(school?.bankAccounts || []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    Bank — {b.bankName} · {b.accountNumber}{b.isDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
           <div className="mt-3 text-sm text-slate-600">

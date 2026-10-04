@@ -110,6 +110,11 @@ const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose })
         <div className="text-xs text-slate-600 mb-2">
           Receipt: <span className="font-mono">{voucher.receiptNo}</span>
           {voucher.paidDate ? ` · Paid on ${voucher.paidDate}` : ''}
+          {voucher.paymentChannel === 'bank'
+            ? ` · Via Bank${voucher.paymentBank ? ` (${voucher.paymentBank})` : ''}`
+            : voucher.paymentChannel === 'cash'
+              ? ' · Via Cash (Counter)'
+              : ''}
         </div>
       )}
 

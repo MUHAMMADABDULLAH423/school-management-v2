@@ -34,6 +34,7 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
+    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
     { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
   ],
   admin: [
@@ -46,8 +47,6 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'academics', label: 'Academics', icon: <BookOpen className={iconCls} /> },
     { id: 'notices', label: 'Notices', icon: <Bell className={iconCls} /> },
     { id: 'holidays', label: 'Holidays', icon: <CalendarDays className={iconCls} /> },
-    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
-    { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
   ],
   teacher: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },

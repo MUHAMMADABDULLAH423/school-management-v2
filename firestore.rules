@@ -166,12 +166,12 @@ service cloud.firestore {
 
     match /expenses/{eid} {
       allow get, list: if isAdmin();
-      allow create, update, delete: if role() == 'admin';
+      allow create, update, delete: if isAdmin();
     }
 
     match /salary/{sid} {
       allow get, list: if isAdmin();
-      allow create, update, delete: if role() == 'admin';
+      allow create, update, delete: if isAdmin();
     }
 
     // ---- AUDIT LOG: append-only ----

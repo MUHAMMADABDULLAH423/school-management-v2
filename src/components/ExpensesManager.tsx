@@ -26,7 +26,7 @@ async function logAudit(uid: string, name: string, action: string, details: stri
  */
 export const ExpensesManager: React.FC = () => {
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'admin';
+  const canManage = currentUser?.role === 'admin' || currentUser?.role === 'principal';
   const { data: expenses, loading } = useCollection<ExpenseRecord>('expenses');
   const { ask, dialog } = useConfirm();
 
@@ -90,7 +90,7 @@ export const ExpensesManager: React.FC = () => {
         action={
           <div className="flex items-center gap-2">
             <TextInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-40" />
-            {isAdmin && (
+            {canManage && (
               <PrimaryButton type="button" onClick={openAdd}>
                 <Plus className="w-4 h-4" /> Add
               </PrimaryButton>
@@ -111,14 +111,14 @@ export const ExpensesManager: React.FC = () => {
         {filtered.length === 0 ? (
           <EmptyState title="No expenses this month" />
         ) : (
-          <Table head={['Title', 'Category', 'Date', 'Amount', ...(isAdmin ? ['Actions'] : [])]}>
+          <Table head={['Title', 'Category', 'Date', 'Amount', ...(canManage ? ['Actions'] : [])]}>
             {filtered.map((e) => (
               <tr key={e.id}>
                 <td className="px-3 py-2 font-semibold text-slate-900">{e.title}</td>
                 <td className="px-3 py-2 text-slate-600">{e.category}</td>
                 <td className="px-3 py-2 text-slate-600">{e.date}</td>
                 <td className="px-3 py-2 font-bold text-slate-900">{formatPKR(e.amount)}</td>
-                {isAdmin && (
+                {canManage && (
                   <td className="px-3 py-2">
                     <div className="flex gap-1.5">
                       <GhostButton type="button" onClick={() => openEdit(e)} className="!px-2.5 !py-1.5">

@@ -5,6 +5,8 @@ import UserManager from '../components/UserManager';
 import { SchoolProfile } from '../components/SchoolProfile';
 import { AuditLogView } from '../components/AuditLogView';
 import { FeeOverview } from '../components/FeeOverview';
+import { ExpensesManager } from '../components/ExpensesManager';
+import { SalaryManager } from '../components/SalaryManager';
 import { DateFilter, filterLabelFor } from '../components/DateFilter';
 import { Card, Spinner } from '../components/ui';
 import { useCollection } from '../hooks/useFirestore';
@@ -56,6 +58,12 @@ export const PrincipalDashboard: React.FC<{ initialTab?: string }> = ({ initialT
       {activeTab === 'users' && <UserManager />}
       {activeTab === 'school' && <SchoolProfile />}
       {activeTab === 'fees' && <PrincipalFeeView />}
+      {activeTab === 'finance' && (
+        <div className="space-y-5">
+          <ExpensesManager />
+          <SalaryManager />
+        </div>
+      )}
       {activeTab === 'audit' && <AuditLogView />}
     </div>
   );

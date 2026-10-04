@@ -25,7 +25,7 @@ async function logAudit(uid: string, name: string, action: string, details: stri
  */
 export const SalaryManager: React.FC = () => {
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'admin';
+  const canManage = currentUser?.role === 'admin' || currentUser?.role === 'principal';
   const { data: staff, loading: loadingStaff } = useCollection<StaffMember>('staff');
   const { data: salaries, loading: loadingSalary } = useCollection<SalaryRecord>('salary');
 
@@ -121,7 +121,7 @@ export const SalaryManager: React.FC = () => {
             icon={<BadgeCheck className="w-5 h-5" />} tone="emerald" />
         </div>
 
-        {isAdmin && (
+        {canManage && (
           <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50/60">
             <div className="text-sm font-bold text-slate-800 mb-3">Generate salary for {month}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -153,9 +153,9 @@ export const SalaryManager: React.FC = () => {
         )}
 
         {monthRecords.length === 0 ? (
-          <EmptyState title={`No salaries for ${month}`} hint={isAdmin ? 'Generate payroll above.' : ''} />
+          <EmptyState title={`No salaries for ${month}`} hint={canManage ? 'Generate payroll above.' : ''} />
         ) : (
-          <Table head={['Staff', 'Basic', 'Allowances', 'Deductions', 'Net Pay', 'Status', ...(isAdmin ? ['Action'] : [])]}>
+          <Table head={['Staff', 'Basic', 'Allowances', 'Deductions', 'Net Pay', 'Status', ...(canManage ? ['Action'] : [])]}>
             {monthRecords
               .slice()
               .sort((a, b) => nameOf(a.staffId).localeCompare(nameOf(b.staffId)))
@@ -176,7 +176,7 @@ export const SalaryManager: React.FC = () => {
                       {r.status}{r.paidDate ? ` · ${r.paidDate}` : ''}
                     </Badge>
                   </td>
-                  {isAdmin && (
+                  {canManage && (
                     <td className="px-3 py-2">
                       {r.status !== 'Paid' && (
                         <PrimaryButton type="button" onClick={() => markPaid(r)} className="!px-3 !py-1.5 text-xs">

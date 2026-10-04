@@ -135,6 +135,10 @@ export interface FeeVoucher {
   receiptNo?: string;
   /** Snapshot of the bank account printed on the voucher */
   bankSnapshot?: string;
+  /** How the payment was received: 'cash' (counter) or 'bank'. Set at collection time. */
+  paymentChannel?: 'cash' | 'bank';
+  /** Bank account label when paymentChannel is 'bank' (e.g. "Meezan Bank — 0123…"). */
+  paymentBank?: string;
   createdAt: string;
 }
 

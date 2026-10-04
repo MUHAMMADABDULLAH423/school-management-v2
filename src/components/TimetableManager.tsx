@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Clock3, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
-import { addDoc, collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { Clock3, Eraser, MapPin, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { addDoc, collection, deleteDoc, doc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useDoc } from '../hooks/useFirestore';
@@ -11,7 +11,29 @@ import {
 } from './ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+const PERIODS = [1, 2, 3, 4, 5, 6, 7];
+
+/* ------------------------------------------------------------------ */
+/* Removable example timetable (Classes 3–8, clash-free by design).     */
+/* Every example slot carries isExample:true and an `example_` doc id, */
+/* so "Remove Example" deletes exactly these docs and nothing else.    */
+/* No classes, students, staff or rules are touched.                   */
+/* ------------------------------------------------------------------ */
+const EXAMPLE_CLASSES = ['3', '4', '5', '6', '7', '8'];
+const EXAMPLE_SECTION = 'A';
+const EXAMPLE_TEACHERS = [
+  { id: 'ex_teacher_0', name: 'Ahmed Khan', subject: 'Mathematics' },
+  { id: 'ex_teacher_1', name: 'Fatima Raza', subject: 'English' },
+  { id: 'ex_teacher_2', name: 'Bilal Hussain', subject: 'Urdu' },
+  { id: 'ex_teacher_3', name: 'Ayesha Malik', subject: 'Science' },
+  { id: 'ex_teacher_4', name: 'Usman Tariq', subject: 'Islamiat' },
+  { id: 'ex_teacher_5', name: 'Sana Iqbal', subject: 'Computer' },
+];
+const PERIOD_TIMES = [
+  '',
+  '8:00 – 8:45', '8:45 – 9:30', '9:30 – 10:15',
+  '10:45 – 11:30', '11:30 – 12:15', '12:15 – 1:00', '1:00 – 1:45',
+];
 
 const clsLabel = (c: string, s: string) => `${c} - ${s}`;
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -155,6 +177,103 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
     });
   };
 
+  const [seeding, setSeeding] = useState(false);
+  const hasExample = useMemo(() => slots.some((s) => s.isExample), [slots]);
+
+  /**
+   * Builds a clash-free example timetable:
+   * teacher index = (period + class + day) mod 6, so within any single
+   * day+period every class gets a DIFFERENT teacher — a clash is
+   * impossible by construction. Each teacher owns one distinct subject,
+   * so every class-day always shows 6 distinct subjects.
+   */
+  const loadExample = async () => {
+    if (!currentUser || seeding) return;
+    setSeeding(true);
+    setMsg('');
+    try {
+      const planned: Array<Record<string, unknown> & { id: string }> = [];
+      EXAMPLE_CLASSES.forEach((cls, c) => {
+        const cs = clsLabel(cls, EXAMPLE_SECTION);
+        DAYS.forEach((day, d) => {
+          PERIODS.forEach((p) => {
+            const t = EXAMPLE_TEACHERS[(p + c + d) % EXAMPLE_TEACHERS.length];
+            planned.push({
+              id: `example_${sanitize(cs)}_${day}_${p}`,
+              classSection: cs, day, period: p,
+              time: PERIOD_TIMES[p], subject: t.subject,
+              teacherId: t.id, teacherName: t.name,
+              room: `R-${cls}`, isExample: true,
+            });
+          });
+        });
+      });
+
+      // Verify before writing: no teacher twice in one day+period,
+      // and every class-day covers at least 5 distinct subjects.
+      let clashes = 0;
+      const perSlot = new Map<string, string[]>();
+      planned.forEach((s) => {
+        const key = `${s.day}|${s.period}`;
+        const arr = perSlot.get(key) || [];
+        if (arr.includes(s.teacherId as string)) clashes++;
+        arr.push(s.teacherId as string);
+        perSlot.set(key, arr);
+      });
+      const perClassDay = new Map<string, Set<string>>();
+      planned.forEach((s) => {
+        const key = `${s.classSection}|${s.day}`;
+        if (!perClassDay.has(key)) perClassDay.set(key, new Set());
+        perClassDay.get(key)!.add(s.subject as string);
+      });
+      const thinDays = [...perClassDay.values()].filter((set) => set.size < 5).length;
+      if (clashes > 0 || thinDays > 0) {
+        throw new Error(`Example failed verification (${clashes} clashes, ${thinDays} thin days) — nothing was written.`);
+      }
+
+      const batch = writeBatch(db);
+      planned.forEach((s) => {
+        const { id, ...data } = s;
+        batch.set(doc(db, 'timetable', id), data);
+      });
+      await batch.commit();
+      await logAudit(currentUser.uid, currentUser.name, 'Loaded example timetable',
+        `${planned.length} example periods for classes 3–8 (0 clashes verified)`);
+      setClassSection(clsLabel(EXAMPLE_CLASSES[0], EXAMPLE_SECTION));
+      setMsg(`Example timetable loaded — ${planned.length} periods across classes 3–8, 6 teachers, 0 clashes. Use "Remove Example" anytime to delete it cleanly.`);
+    } catch (e: any) {
+      setMsg(e?.message || 'Failed to load example timetable.');
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const removeExample = () => {
+    if (!currentUser || seeding) return;
+    ask({
+      title: 'Remove example timetable',
+      message: 'Delete all example periods? Only slots marked as example will be removed — your real timetable data stays untouched.',
+      onConfirm: async () => {
+        setSeeding(true);
+        setMsg('');
+        try {
+          const snap = await getDocs(query(collection(db, 'timetable'), where('isExample', '==', true)));
+          const batch = writeBatch(db);
+          snap.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+          await logAudit(currentUser.uid, currentUser.name, 'Removed example timetable',
+            `${snap.size} example slots deleted`);
+          setClassSection('');
+          setMsg(`Example timetable removed — ${snap.size} periods deleted. Real data untouched.`);
+        } catch (e: any) {
+          setMsg(e?.message || 'Failed to remove example timetable.');
+        } finally {
+          setSeeding(false);
+        }
+      },
+    });
+  };
+
   if (loading) return <Spinner />;
 
   /* ---------- teacher: own slots list ---------- */
@@ -220,6 +339,28 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
                 title="Add new class"
               >
                 <Plus className="w-4 h-4" /> Class
+              </button>
+            )}
+            {canEdit && !hasExample && (
+              <button
+                type="button"
+                onClick={loadExample}
+                disabled={seeding}
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100 border border-amber-200 disabled:opacity-50"
+                title="Load a clash-free example timetable for classes 3–8 (removable)"
+              >
+                <Sparkles className="w-4 h-4" /> {seeding ? 'Loading…' : 'Example'}
+              </button>
+            )}
+            {canEdit && hasExample && (
+              <button
+                type="button"
+                onClick={removeExample}
+                disabled={seeding}
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-sm font-bold hover:bg-rose-100 border border-rose-200 disabled:opacity-50"
+                title="Delete all example timetable slots (real data untouched)"
+              >
+                <Eraser className="w-4 h-4" /> {seeding ? 'Working…' : 'Remove Example'}
               </button>
             )}
           </div>

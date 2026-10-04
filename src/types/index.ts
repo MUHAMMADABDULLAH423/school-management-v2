@@ -183,6 +183,8 @@ export interface TimetableSlot {
   teacherId?: string;
   teacherName: string;
   room?: string;
+  /** True for removable demo slots created by "Load Example". Never set on real data. */
+  isExample?: boolean;
 }
 
 export interface DiaryEntry {

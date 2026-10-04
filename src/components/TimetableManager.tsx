@@ -60,14 +60,17 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
   );
 
   const classOptions = useMemo(() => {
-    if (classes.length > 0) return classes.map((c) => clsLabel(c.name, c.section));
-    // Fall back to distinct class-sections from active students so the grid
-    // works even before the classes collection is set up.
-    const fromStudents = [...new Set(
-      students.filter((s) => s.isActive).map((s) => clsLabel(s.class, s.section))
-    )];
-    if (fromStudents.length > 0) return fromStudents;
-    return [...new Set(slots.map((s) => s.classSection))];
+    // Merge every known class-section so the dropdown always lists all of them:
+    // classes collection, active students, and existing timetable slots.
+    const merged: string[] = [];
+    const push = (v: string) => {
+      const label = (v || '').trim();
+      if (label && !merged.some((m) => m.toLowerCase() === label.toLowerCase())) merged.push(label);
+    };
+    classes.forEach((c) => push(clsLabel(c.name, c.section)));
+    students.filter((s) => s.isActive).forEach((s) => push(clsLabel(s.class, s.section)));
+    slots.forEach((s) => push(s.classSection));
+    return merged.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [classes, students, slots]);
 
   const sel = classSection || classOptions[0] || '';

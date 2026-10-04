@@ -4,7 +4,7 @@ import { addDoc, collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useDoc } from '../hooks/useFirestore';
-import { ClassSection, StaffMember, TimetableSlot } from '../types';
+import { ClassSection, StaffMember, Student, TimetableSlot } from '../types';
 import {
   Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal, PrimaryButton,
   Select, Spinner, TextInput, useConfirm,
@@ -42,12 +42,17 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
   const { data: slots, loading } = useCollection<TimetableSlot>('timetable');
   const { data: classes } = useCollection<ClassSection>('classes');
   const { data: staff } = useCollection<StaffMember>('staff');
+  const { data: students } = useCollection<Student>('students');
   const { data: myStaffDoc } = useDoc<StaffMember>('staff', currentUser?.staffId || 'none');
   const { ask, dialog } = useConfirm();
 
   const [classSection, setClassSection] = useState('');
   const [modal, setModal] = useState<SlotForm | null>(null);
   const [msg, setMsg] = useState('');
+  const [showAddClass, setShowAddClass] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newSection, setNewSection] = useState('');
+  const [addingClass, setAddingClass] = useState(false);
 
   const teachers = useMemo(
     () => staff.filter((s) => s.isActive && s.role === 'teacher').sort((a, b) => a.name.localeCompare(b.name)),
@@ -56,10 +61,38 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
 
   const classOptions = useMemo(() => {
     if (classes.length > 0) return classes.map((c) => clsLabel(c.name, c.section));
+    // Fall back to distinct class-sections from active students so the grid
+    // works even before the classes collection is set up.
+    const fromStudents = [...new Set(
+      students.filter((s) => s.isActive).map((s) => clsLabel(s.class, s.section))
+    )];
+    if (fromStudents.length > 0) return fromStudents;
     return [...new Set(slots.map((s) => s.classSection))];
-  }, [classes, slots]);
+  }, [classes, students, slots]);
 
   const sel = classSection || classOptions[0] || '';
+
+  const addClass = async () => {
+    const name = newClassName.trim();
+    const section = newSection.trim() || 'A';
+    if (!name || !currentUser || addingClass) return;
+    setAddingClass(true);
+    try {
+      await addDoc(collection(db, 'classes'), {
+        name, section, subjects: [], academicYear: '',
+      });
+      await logAudit(currentUser.uid, currentUser.name, 'Added class', `${name} - ${section}`);
+      setClassSection(clsLabel(name, section));
+      setShowAddClass(false);
+      setNewClassName('');
+      setNewSection('');
+      setMsg(`Class ${name} - ${section} added — you can now build its timetable.`);
+    } catch (e: any) {
+      setMsg(e?.message || 'Failed to add class.');
+    } finally {
+      setAddingClass(false);
+    }
+  };
 
   const myStaffId = currentUser?.staffId;
 
@@ -170,10 +203,22 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
         title="Class Timetable"
         subtitle={canEdit ? 'Click a cell to add or edit a period.' : 'Weekly schedule (read-only).'}
         action={
-          <div className="w-48">
-            <Select value={sel} onChange={(e) => setClassSection(e.target.value)}>
-              {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
+          <div className="flex items-center gap-2">
+            <div className="w-48">
+              <Select value={sel} onChange={(e) => setClassSection(e.target.value)}>
+                {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => { setNewClassName(''); setNewSection(''); setShowAddClass(true); }}
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-bold hover:bg-indigo-100 border border-indigo-200"
+                title="Add new class"
+              >
+                <Plus className="w-4 h-4" /> Class
+              </button>
+            )}
           </div>
         }
       />
@@ -286,6 +331,27 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
           </div>
         </Modal>
       )}
+      {showAddClass && (
+        <Modal title="Add Class" subtitle="The new class will appear in the dropdown right away." onClose={() => setShowAddClass(false)}>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Class name">
+                <TextInput value={newClassName} onChange={(e) => setNewClassName(e.target.value)} placeholder="e.g. 8" />
+              </Field>
+              <Field label="Section">
+                <TextInput value={newSection} onChange={(e) => setNewSection(e.target.value)} placeholder="e.g. B" />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2">
+              <GhostButton type="button" onClick={() => setShowAddClass(false)}>Cancel</GhostButton>
+              <PrimaryButton type="button" onClick={addClass} disabled={!newClassName.trim() || addingClass}>
+                <Plus className="w-4 h-4" /> {addingClass ? 'Adding…' : 'Add Class'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {dialog}
     </Card>
   );

@@ -43,6 +43,13 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
   const [checkInBusy, setCheckInBusy] = useState(false);
   const [checkInMsg, setCheckInMsg] = useState('');
   const [checkInOk, setCheckInOk] = useState(false);
+  // Step-1 location confirmation state
+  const [locBusy, setLocBusy] = useState(false);
+  const [locChecked, setLocChecked] = useState(false);
+  const [locOk, setLocOk] = useState(false);
+  const [locMsg, setLocMsg] = useState('');
+  const [locAt, setLocAt] = useState(0);
+  const [locCoords, setLocCoords] = useState<{ lat: number; lng: number; dist: number } | null>(null);
 
   const myStaffId = currentUser?.staffId;
 
@@ -94,32 +101,66 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
     }
   };
 
-  /* ---------- self check-in (teacher/staff): location-gated ---------- */
-  const checkIn = async () => {
+  /* ---------- step 1: confirm the teacher is inside the school radius (no marking) ---------- */
+  const confirmLocation = async (): Promise<{ ok: boolean; lat?: number; lng?: number; dist?: number }> => {
+    const gps = school?.gpsLocation;
+    const fenced = hasGpsFence(gps);
+    if (!fenced || !gps) {
+      setLocChecked(true);
+      setLocOk(true);
+      setLocCoords(null);
+      setLocMsg('School location is not configured — check-in is open without a location check.');
+      return { ok: true };
+    }
+    setLocBusy(true);
+    setLocMsg('');
+    try {
+      const pos = await getCurrentPosition();
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const dist = Math.round(distanceMeters(lat, lng, Number(gps.lat), Number(gps.lng)));
+      const radius = Number(gps.radius) || 100;
+      const ok = dist <= radius;
+      setLocChecked(true);
+      setLocOk(ok);
+      setLocAt(Date.now());
+      setLocCoords({ lat, lng, dist });
+      setLocMsg(ok
+        ? `You are ${dist} m from the school — inside the allowed radius (${radius} m). You can now mark your attendance.`
+        : `You are ${dist} m away from the school — outside the allowed radius (${radius} m). Please move inside the school premises and confirm again.`);
+      return { ok, lat, lng, dist };
+    } catch (e: any) {
+      setLocChecked(false);
+      setLocOk(false);
+      setLocMsg(geoErrorMessage(e));
+      return { ok: false };
+    } finally {
+      setLocBusy(false);
+    }
+  };
+
+  /* ---------- step 2: mark attendance (re-verifies location if the check is stale) ---------- */
+  const markAttendance = async () => {
     if (!currentUser || !myStaffId || checkInBusy) return;
+    const fenced = hasGpsFence(school?.gpsLocation);
     setCheckInBusy(true);
     setCheckInMsg('');
     setCheckInOk(false);
     try {
-      const gps = school?.gpsLocation;
-      const fenced = hasGpsFence(gps);
       let lat: number | undefined;
       let lng: number | undefined;
       let dist: number | undefined;
 
-      if (fenced && gps) {
-        const pos = await getCurrentPosition();
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        dist = Math.round(distanceMeters(lat, lng, Number(gps.lat), Number(gps.lng)));
-        const radius = Number(gps.radius) || 100;
-        if (dist > radius) {
-          setCheckInMsg(
-            `You are ${dist} m away from the school (allowed radius ${radius} m). ` +
-            `Check-in blocked — please move inside the school premises and try again.`
-          );
+      if (fenced) {
+        const fresh = locChecked && Date.now() - locAt < 10 * 60 * 1000;
+        const res = fresh
+          ? { ok: locOk, lat: locCoords?.lat, lng: locCoords?.lng, dist: locCoords?.dist }
+          : await confirmLocation();
+        if (!res.ok) {
+          setCheckInMsg('Location is not confirmed inside the school radius. Please use "Confirm My Location" first.');
           return;
         }
+        lat = res.lat; lng = res.lng; dist = res.dist;
       }
 
       const today = todayStr();
@@ -136,10 +177,12 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
         `Checked in on ${today}` + (dist !== undefined ? ` (${dist} m from school)` : ''));
       setCheckInOk(true);
       setCheckInMsg(
-        fenced ? `Checked in successfully — you are ${dist} m from the school.` : 'Checked in successfully.'
+        fenced && dist !== undefined
+          ? `Checked in successfully — you are ${dist} m from the school.`
+          : 'Checked in successfully.'
       );
     } catch (e: any) {
-      setCheckInMsg(geoErrorMessage(e));
+      setCheckInMsg(e?.message || 'Failed to mark attendance.');
     } finally {
       setCheckInBusy(false);
     }
@@ -173,10 +216,17 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
                   <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
                     {fenced
-                      ? `Location-verified check-in: you must be within ${school?.gpsLocation?.radius || 100} m of the school. Your location is checked when you press the button.`
+                      ? `Step 1: confirm your location — checks whether you are inside the school radius (${school?.gpsLocation?.radius || 100} m). Step 2: mark your attendance.`
                       : 'School location is not configured yet — check-in is currently open. Ask the principal to set the GPS location in School Profile.'}
                   </span>
                 </div>
+                {locMsg && (
+                  <div className={`px-4 py-3 rounded-xl text-sm border ${locOk
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                    {locMsg}
+                  </div>
+                )}
                 {checkInMsg && (
                   <div className={`px-4 py-3 rounded-xl text-sm border ${checkInOk
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -184,10 +234,29 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
                     {checkInMsg}
                   </div>
                 )}
-                <PrimaryButton type="button" onClick={checkIn} disabled={checkInBusy} className="w-full sm:w-auto">
-                  <Clock className="w-4 h-4" />
-                  {checkInBusy ? 'Getting your location…' : 'Check In'}
-                </PrimaryButton>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => confirmLocation()}
+                    disabled={locBusy || checkInBusy}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-800 text-sm font-bold hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    {locBusy ? 'Locating…' : 'Confirm My Location'}
+                  </button>
+                  <PrimaryButton
+                    type="button"
+                    onClick={markAttendance}
+                    disabled={checkInBusy || locBusy || (fenced && !(locChecked && locOk))}
+                    className="flex-1"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {checkInBusy ? 'Marking…' : 'Mark My Attendance'}
+                  </PrimaryButton>
+                </div>
+                {fenced && !(locChecked && locOk) && (
+                  <div className="text-[11px] text-slate-500">Confirm your location first — the mark button unlocks once you are inside the school radius.</div>
+                )}
               </div>
             )}
           </div>

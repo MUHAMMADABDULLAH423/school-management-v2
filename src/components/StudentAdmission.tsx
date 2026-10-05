@@ -16,7 +16,7 @@ import { UserPlus, Pencil, Power, PowerOff, Eye } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
-import { Student, FeeStatus } from '../types';
+import { Student, ClassSection, FeeStatus } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, Select, PrimaryButton, GhostButton,
   Badge, Avatar, SearchInput, Table, EmptyState, Spinner, useConfirm,
@@ -78,6 +78,25 @@ const StudentAdmission: React.FC = () => {
   const set = (k: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const { data: classDocs } = useCollection<ClassSection>('classes');
+
+  /** Class options come ONLY from the Classes menu (plus the record's own
+   *  legacy value in edit mode so it never vanishes). */
+  const classSelectOptions = useMemo(() => {
+    const opts = classDocs.map((c) => ({
+      label: `${c.name} - ${c.section}`, cls: c.name, sec: c.section,
+    }));
+    const cur = form.class.trim() && form.section.trim()
+      ? `${form.class.trim()} - ${form.section.trim()}` : '';
+    if (cur && !opts.some((o) => o.label.toLowerCase() === cur.toLowerCase())) {
+      opts.push({ label: cur, cls: form.class.trim(), sec: form.section.trim() });
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [classDocs, form.class, form.section]);
+
+  const selectedClassLabel = form.class.trim() && form.section.trim()
+    ? `${form.class.trim()} - ${form.section.trim()}` : '';
 
   const classOptions = useMemo(
     () => Array.from(new Set(students.map((s) => s.class))).filter(Boolean).sort(),
@@ -301,12 +320,25 @@ const StudentAdmission: React.FC = () => {
             <Field label="Roll number *">
               <TextInput value={form.rollNumber} onChange={set('rollNumber')} placeholder="e.g. 6A-012" />
             </Field>
-            <Field label="Class *">
-              <TextInput value={form.class} onChange={set('class')} placeholder="e.g. 6" />
-            </Field>
-            <Field label="Section *">
-              <TextInput value={form.section} onChange={set('section')} placeholder="e.g. A" />
-            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Class *">
+                <Select
+                  value={selectedClassLabel}
+                  onChange={(e) => {
+                    const o = classSelectOptions.find((x) => x.label === e.target.value);
+                    setForm((f) => ({ ...f, class: o?.cls || '', section: o?.sec || '' }));
+                  }}
+                >
+                  <option value="">— Select class —</option>
+                  {classSelectOptions.map((o) => (
+                    <option key={o.label} value={o.label}>{o.label}</option>
+                  ))}
+                </Select>
+                {classSelectOptions.length === 0 && (
+                  <p className="mt-1 text-xs text-slate-400">No classes yet — add them from the Classes menu first.</p>
+                )}
+              </Field>
+            </div>
             <Field label="Date of birth">
               <TextInput type="date" value={form.dob} onChange={set('dob')} />
             </Field>

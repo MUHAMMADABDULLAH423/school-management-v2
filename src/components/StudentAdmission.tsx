@@ -99,6 +99,27 @@ const StudentAdmission: React.FC = () => {
   const selectedClassLabel = form.class.trim() && form.section.trim()
     ? `${form.class.trim()} - ${form.section.trim()}` : '';
 
+  /**
+   * Suggest a class-prefixed roll number, e.g. class "8" + section "b" -> "8B-01".
+   * Serial = max trailing number among students of the same class-section + 1.
+   */
+  const suggestRollNumber = (cls: string, sec: string): string => {
+    const c = cls.trim(), s = sec.trim();
+    if (!c || !s) return '';
+    const clean = (v: string) => v.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const prefix = `${clean(c)}${clean(s).slice(0, 1)}`;
+    if (!prefix) return '';
+    let max = 0;
+    students.forEach((st) => {
+      if (st.class.trim().toLowerCase() === c.toLowerCase()
+        && st.section.trim().toLowerCase() === s.toLowerCase()) {
+        const m = (st.rollNumber || '').match(/(\d+)(?!.*\d)/);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      }
+    });
+    return `${prefix}-${String(max + 1).padStart(2, '0')}`;
+  };
+
   /** Filter options come ONLY from the Classes menu — nothing else. */
   const classOptions = useMemo(
     () => classDocs
@@ -346,7 +367,8 @@ const StudentAdmission: React.FC = () => {
               <TextInput value={form.name} onChange={set('name')} placeholder="e.g. Ahmed Raza" />
             </Field>
             <Field label="Roll number *">
-              <TextInput value={form.rollNumber} onChange={set('rollNumber')} placeholder="e.g. 6A-012" />
+              <TextInput value={form.rollNumber} onChange={set('rollNumber')} placeholder="Auto-suggests like 8B-01" />
+              <p className="mt-1 text-xs text-slate-400">Class prefix auto-added on new admission (e.g. 8B-01). Editable.</p>
             </Field>
             <Field label="Admission No.">
               <TextInput value={form.admissionNo} onChange={set('admissionNo')} placeholder="e.g. 1001" />
@@ -357,7 +379,15 @@ const StudentAdmission: React.FC = () => {
                   value={selectedClassLabel}
                   onChange={(e) => {
                     const o = classSelectOptions.find((x) => x.label === e.target.value);
-                    setForm((f) => ({ ...f, class: o?.cls || '', section: o?.sec || '' }));
+                    setForm((f) => ({
+                      ...f,
+                      class: o?.cls || '',
+                      section: o?.sec || '',
+                      // New admission + roll empty -> auto-suggest class-prefixed roll no.
+                      rollNumber: !editing && o && !f.rollNumber.trim()
+                        ? suggestRollNumber(o.cls, o.sec)
+                        : f.rollNumber,
+                    }));
                   }}
                 >
                   <option value="">— Select class —</option>

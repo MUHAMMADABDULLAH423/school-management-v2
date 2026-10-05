@@ -77,6 +77,8 @@ export interface Student {
   class: string;
   section: string;
   rollNumber: string;
+  /** Permanent admission number — unique per student, never changes (unlike roll number). */
+  admissionNo?: string;
   dob: string;
   gender: 'Male' | 'Female' | 'Other';
   address: string;

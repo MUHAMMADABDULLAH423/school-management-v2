@@ -43,6 +43,7 @@ interface FormState {
   class: string;
   section: string;
   rollNumber: string;
+  admissionNo: string;
   dob: string;
   gender: 'Male' | 'Female' | 'Other';
   address: string;
@@ -54,7 +55,7 @@ interface FormState {
 }
 
 const emptyForm = (): FormState => ({
-  name: '', photo: '', class: '', section: '', rollNumber: '', dob: '',
+  name: '', photo: '', class: '', section: '', rollNumber: '', admissionNo: '', dob: '',
   gender: 'Male', address: '', parentName: '', parentPhone: '',
   parentWhatsApp: '', parentEmail: '', feeStatus: 'Pending',
 });
@@ -117,16 +118,24 @@ const StudentAdmission: React.FC = () => {
       .filter((s) =>
         !q
           ? true
-          : [s.name, s.rollNumber, s.parentName, s.parentPhone].some((v) =>
+          : [s.name, s.rollNumber, s.admissionNo, s.parentName, s.parentPhone].some((v) =>
               (v || '').toLowerCase().includes(q)
             )
       )
       .sort((a, b) => a.class.localeCompare(b.class) || a.rollNumber.localeCompare(b.rollNumber));
   }, [students, search, classFilter]);
 
+  /** Suggest the next admission number: max existing numeric + 1 (starts at 1001). */
+  const nextAdmissionNo = (): string => {
+    const nums = students
+      .map((s) => parseInt((s.admissionNo || '').trim(), 10))
+      .filter((n) => Number.isFinite(n));
+    return String((nums.length ? Math.max(...nums) : 1000) + 1);
+  };
+
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), admissionNo: nextAdmissionNo() });
     setPhotoRecordId(`new-${Date.now()}`); // fresh record id once per modal open
     setError('');
     setModalOpen(true);
@@ -136,7 +145,7 @@ const StudentAdmission: React.FC = () => {
     setEditing(s);
     setForm({
       name: s.name || '', photo: s.photo || '', class: s.class || '', section: s.section || '',
-      rollNumber: s.rollNumber || '', dob: s.dob || '', gender: s.gender || 'Male',
+      rollNumber: s.rollNumber || '', admissionNo: s.admissionNo || '', dob: s.dob || '', gender: s.gender || 'Male',
       address: s.address || '', parentName: s.parentName || '', parentPhone: s.parentPhone || '',
       parentWhatsApp: s.parentWhatsApp || '', parentEmail: s.parentEmail || '',
       feeStatus: s.feeStatus || 'Pending',
@@ -150,6 +159,17 @@ const StudentAdmission: React.FC = () => {
     if (!form.name.trim() || !form.class.trim() || !form.section.trim() || !form.rollNumber.trim()) {
       setError('Name, Class, Section and Roll Number are required.');
       return false;
+    }
+    const adm = form.admissionNo.trim();
+    if (adm) {
+      const dup = students.some(
+        (s) => (s.admissionNo || '').trim().toLowerCase() === adm.toLowerCase()
+          && (!editing || s.id !== editing.id)
+      );
+      if (dup) {
+        setError(`Admission No. ${adm} is already assigned to another student.`);
+        return false;
+      }
     }
     return true;
   };
@@ -165,6 +185,7 @@ const StudentAdmission: React.FC = () => {
         class: form.class.trim(),
         section: form.section.trim(),
         rollNumber: form.rollNumber.trim(),
+        admissionNo: form.admissionNo.trim(),
         dob: form.dob,
         gender: form.gender,
         address: form.address.trim(),
@@ -327,6 +348,9 @@ const StudentAdmission: React.FC = () => {
             <Field label="Roll number *">
               <TextInput value={form.rollNumber} onChange={set('rollNumber')} placeholder="e.g. 6A-012" />
             </Field>
+            <Field label="Admission No.">
+              <TextInput value={form.admissionNo} onChange={set('admissionNo')} placeholder="e.g. 1001" />
+            </Field>
             <div className="sm:col-span-2">
               <Field label="Class *">
                 <Select
@@ -419,6 +443,7 @@ const StudentAdmission: React.FC = () => {
             <DetailRow label="Class" value={viewing.class} />
             <DetailRow label="Section" value={viewing.section} />
             <DetailRow label="Roll Number" value={viewing.rollNumber} />
+            <DetailRow label="Admission No." value={viewing.admissionNo} />
             <DetailRow label="Parent Phone" value={viewing.parentPhone} />
             <DetailRow label="Parent WhatsApp" value={viewing.parentWhatsApp} />
             <DetailRow label="Parent Email" value={viewing.parentEmail} />

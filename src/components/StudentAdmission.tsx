@@ -98,15 +98,22 @@ const StudentAdmission: React.FC = () => {
   const selectedClassLabel = form.class.trim() && form.section.trim()
     ? `${form.class.trim()} - ${form.section.trim()}` : '';
 
+  /** Filter options come ONLY from the Classes menu — nothing else. */
   const classOptions = useMemo(
-    () => Array.from(new Set(students.map((s) => s.class))).filter(Boolean).sort(),
-    [students]
+    () => classDocs
+      .map((c) => `${c.name} - ${c.section}`)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [classDocs]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return students
-      .filter((s) => (classFilter === 'all' ? true : s.class === classFilter))
+      .filter((s) => {
+        if (classFilter === 'all') return true;
+        return `${(s.class || '').trim()} - ${(s.section || '').trim()}`.toLowerCase()
+          === classFilter.toLowerCase();
+      })
       .filter((s) =>
         !q
           ? true

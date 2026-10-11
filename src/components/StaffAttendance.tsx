@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Clock, MapPin, Save } from 'lucide-react';
-import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteField, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -86,7 +86,11 @@ export const StaffAttendance: React.FC<{ selfView?: boolean }> = ({ selfView = f
         const status = markOf(m.id);
         await setDoc(doc(db, 'attendance', `${date}_${m.id}`), {
           type: 'staff', staffId: m.id, status, date,
-          checkInTime: status === 'Present' ? new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : undefined,
+          // check-in time only makes sense for Present; deleteField() keeps
+          // stale times from lingering when a status is changed to Late etc.
+          checkInTime: status === 'Present'
+            ? new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
+            : deleteField(),
           markedBy: currentUser.name,
         }, { merge: true });
       }

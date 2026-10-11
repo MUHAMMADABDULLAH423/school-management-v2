@@ -50,7 +50,10 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   const { currentUser } = useAuth();
 
   const [monthFilter, setMonthFilter] = useState(monthStr());
+  const [allMonths, setAllMonths] = useState(false);
   const [search, setSearch] = useState('');
+  /** Card-driven quick filter: paid / pending / defaulters vouchers. */
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending' | 'defaulters'>('all');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [collectFor, setCollectFor] = useState<FeeVoucher | null>(null);
   const [printFor, setPrintFor] = useState<FeeVoucher | null>(null);
@@ -76,21 +79,31 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
     return m;
   }, [students]);
 
+  const defaulterIds = useMemo(
+    () => new Set(students.filter((s) => s.isActive && s.feeStatus === 'Defaulter').map((s) => s.id)),
+    [students]
+  );
+
   const monthFees = useMemo(
-    () => fees.filter((f) => f.month === monthFilter).sort((a, b) => a.voucherNumber.localeCompare(b.voucherNumber)),
-    [fees, monthFilter]
+    () => (allMonths ? [...fees] : fees.filter((f) => f.month === monthFilter))
+      .sort((a, b) => a.voucherNumber.localeCompare(b.voucherNumber)),
+    [fees, monthFilter, allMonths]
   );
 
   const filteredFees = useMemo(() => {
+    let list = monthFees;
+    if (statusFilter === 'paid') list = list.filter((f) => f.status === 'Paid');
+    else if (statusFilter === 'pending') list = list.filter((f) => (f.dueAmount || 0) > 0);
+    else if (statusFilter === 'defaulters') list = list.filter((f) => defaulterIds.has(f.studentId));
     const q = search.trim().toLowerCase();
-    if (!q) return monthFees;
-    return monthFees.filter((f) => {
+    if (!q) return list;
+    return list.filter((f) => {
       const s = studentsById.get(f.studentId);
       return [f.voucherNumber, s?.name, s?.rollNumber, f.status].some((v) =>
         (v || '').toLowerCase().includes(q)
       );
     });
-  }, [monthFees, search, studentsById]);
+  }, [monthFees, statusFilter, defaulterIds, search, studentsById]);
 
   const collected = useMemo(
     () => monthFees.reduce((t, f) => t + (f.paidAmount || 0), 0),
@@ -214,42 +227,63 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
 
   const printStudent = printFor ? studentsById.get(printFor.studentId) : null;
 
+  const monthScope = allMonths ? 'all months' : monthFilter;
+  const toggleStatus = (key: 'paid' | 'pending' | 'defaulters') =>
+    setStatusFilter((cur) => (cur === key ? 'all' : key));
+  const cardBtn = (active: boolean) =>
+    `text-left w-full rounded-2xl cursor-pointer transition hover:shadow-md ${active ? 'ring-2 ring-offset-1 ring-indigo-500' : ''}`;
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          label={`Collected — ${monthFilter}`}
-          value={formatPKR(collected)}
-          sub={`${monthFees.length} vouchers`}
-          icon={<Banknote className="w-5 h-5" />}
-          tone="emerald"
-        />
-        <StatCard
-          label={`Pending — ${monthFilter}`}
-          value={formatPKR(pending)}
-          icon={<CircleDollarSign className="w-5 h-5" />}
-          tone="amber"
-        />
-        <StatCard
-          label="Defaulters"
-          value={String(defaulterCount)}
-          sub="active students"
-          icon={<AlertCircle className="w-5 h-5" />}
-          tone="rose"
-        />
+        <button type="button" onClick={() => toggleStatus('paid')} title="Show paid vouchers" className={cardBtn(statusFilter === 'paid')}>
+          <StatCard
+            label={`Collected — ${monthScope}`}
+            value={formatPKR(collected)}
+            sub={`${monthFees.length} vouchers`}
+            icon={<Banknote className="w-5 h-5" />}
+            tone="emerald"
+          />
+        </button>
+        <button type="button" onClick={() => toggleStatus('pending')} title="Show pending vouchers" className={cardBtn(statusFilter === 'pending')}>
+          <StatCard
+            label={`Pending — ${monthScope}`}
+            value={formatPKR(pending)}
+            icon={<CircleDollarSign className="w-5 h-5" />}
+            tone="amber"
+          />
+        </button>
+        <button type="button" onClick={() => toggleStatus('defaulters')} title="Show defaulter vouchers" className={cardBtn(statusFilter === 'defaulters')}>
+          <StatCard
+            label="Defaulters"
+            value={String(defaulterCount)}
+            sub="active students"
+            icon={<AlertCircle className="w-5 h-5" />}
+            tone="rose"
+          />
+        </button>
       </div>
 
       <Card>
         <CardHeader
           title={readOnly ? 'Fee Center (view only)' : 'Fee Center'}
-          subtitle={`${filteredFees.length} vouchers for ${monthFilter}`}
+          subtitle={`${filteredFees.length} vouchers${allMonths ? ' · all months' : ` · ${monthFilter}`}${statusFilter !== 'all' ? ` · ${statusFilter}` : ''}`}
           action={
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAllMonths((v) => !v)}
+                title="Show vouchers from all months"
+                className={`shrink-0 px-3 py-2 rounded-lg text-sm font-bold border transition ${allMonths ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
+              >
+                All
+              </button>
               <TextInput
                 type="month"
                 value={monthFilter}
+                disabled={allMonths}
                 onChange={(e) => setMonthFilter(e.target.value)}
-                className="w-auto"
+                className="w-auto disabled:opacity-40"
               />
               {!readOnly && (
                 <PrimaryButton onClick={() => { setGenMonth(monthFilter); setDueDate(`${monthFilter}-10`); setError(''); setGenerateOpen(true); }}>
@@ -265,7 +299,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
         {feesLoading || studentsLoading ? (
           <Spinner />
         ) : filteredFees.length === 0 ? (
-          <EmptyState title="No vouchers" hint={readOnly ? 'No vouchers for this month.' : 'Generate vouchers for this month to begin.'} />
+          <EmptyState title="No vouchers" hint={statusFilter !== 'all' ? 'No vouchers match this filter — click the card again to clear it.' : readOnly ? 'No vouchers for this view.' : 'Generate vouchers for this month to begin.'} />
         ) : (
           <Table head={['Voucher', 'Student', 'Class', 'Month', 'Total', 'Paid', 'Due', 'Status', 'Via', '']}>
             {filteredFees.map((f) => {

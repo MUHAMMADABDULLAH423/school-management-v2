@@ -5,6 +5,9 @@ import {
   todayStr, formatPKR,
 } from '../types';
 import { monthLabel } from './DateFilter';
+import { navigateTo } from '../utils/navigate';
+
+export type KpiCardKey = 'students' | 'staff' | 'fees';
 
 /**
  * The three rich overview KPI cards (students / staff / fee collection),
@@ -13,6 +16,9 @@ import { monthLabel } from './DateFilter';
  * Optional overrides let a page drive the cards from a date filter:
  * - attendanceDate: YYYY-MM-DD used for the attendance breakdowns (default: today)
  * - feeMonths: YYYY-MM list used for fee collection (default: current month)
+ * - cardTargets: maps a card to the sidebar tab it should open on click.
+ *   A card with no target stays static (e.g. students for the principal,
+ *   who has no students tab by design).
  */
 export const OverviewKpiCards: React.FC<{
   students: Student[];
@@ -21,7 +27,8 @@ export const OverviewKpiCards: React.FC<{
   fees: FeeVoucher[];
   attendanceDate?: string;
   feeMonths?: string[];
-}> = ({ students, staff, attendance, fees, attendanceDate, feeMonths }) => {
+  cardTargets?: Partial<Record<KpiCardKey, string>>;
+}> = ({ students, staff, attendance, fees, attendanceDate, feeMonths, cardTargets }) => {
   const today = todayStr();
   const attDate = attendanceDate || today;
   const months = feeMonths && feeMonths.length > 0 ? feeMonths : [today.slice(0, 7)];
@@ -35,11 +42,14 @@ export const OverviewKpiCards: React.FC<{
   const stuLeaveLate = dayAtt.filter(
     (a) => a.status === 'Leave' || a.status === 'Late' || a.status === 'HalfDay'
   ).length;
+  // Students with no record for the date — keeps the breakdown reconciled with the total
+  const stuNotMarked = Math.max(0, activeStudents.length - dayAtt.length);
 
   // Staff attendance breakdown for the selected date
   const dayStaffAtt = attendance.filter((a) => a.type === 'staff' && a.date === attDate);
   const staffPresent = dayStaffAtt.filter((a) => a.status === 'Present').length;
   const staffAbsentLeave = dayStaffAtt.filter((a) => a.status !== 'Present').length;
+  const staffNotMarked = Math.max(0, activeStaff.length - dayStaffAtt.length);
   const staffPresentPct = dayStaffAtt.length > 0
     ? Math.round((staffPresent / dayStaffAtt.length) * 100)
     : 0;
@@ -58,10 +68,29 @@ export const OverviewKpiCards: React.FC<{
     ? (months[0] === today.slice(0, 7) ? 'This Month' : monthLabel(months[0]))
     : `${months.length} Months`;
 
+  /** Card shell — a real <button> when the card has a navigation target. */
+  const KpiCard: React.FC<{ card: KpiCardKey; label: string; children: React.ReactNode }> = ({
+    card, label, children,
+  }) => {
+    const target = cardTargets?.[card];
+    return target ? (
+      <button
+        type="button"
+        onClick={() => navigateTo(target)}
+        title={label}
+        className="w-full text-left bg-white rounded-2xl border border-slate-200 shadow-sm p-5 cursor-pointer transition hover:shadow-md hover:border-indigo-300"
+      >
+        {children}
+      </button>
+    ) : (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">{children}</div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* ---- Total students with attendance breakdown for the selected date ---- */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <KpiCard card="students" label="View students">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
@@ -74,7 +103,7 @@ export const OverviewKpiCards: React.FC<{
         <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {activeStudents.length.toLocaleString()}
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-3">
+        <div className="grid grid-cols-4 gap-2 mt-3">
           <div className="rounded-xl bg-emerald-50 px-2 py-2 text-center">
             <div className="text-[10px] font-bold text-emerald-700">PRESENT</div>
             <div className="text-base font-extrabold text-emerald-800 tabular-nums">{stuPresent}</div>
@@ -87,11 +116,15 @@ export const OverviewKpiCards: React.FC<{
             <div className="text-[10px] font-bold text-amber-700">LEAVE / LATE</div>
             <div className="text-base font-extrabold text-amber-800 tabular-nums">{stuLeaveLate}</div>
           </div>
+          <div className="rounded-xl bg-slate-100 px-2 py-2 text-center" title="No attendance marked yet">
+            <div className="text-[10px] font-bold text-slate-600">NOT MARKED</div>
+            <div className="text-base font-extrabold text-slate-700 tabular-nums">{stuNotMarked}</div>
+          </div>
         </div>
-      </div>
+      </KpiCard>
 
       {/* ---- Teachers & staff with attendance for the selected date ---- */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <KpiCard card="staff" label="View teachers & staff">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -104,7 +137,7 @@ export const OverviewKpiCards: React.FC<{
         <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {activeStaff.length.toLocaleString()}
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-3">
+        <div className="grid grid-cols-3 gap-2 mt-3">
           <div className="rounded-xl bg-blue-50 px-2 py-2 text-center">
             <div className="text-[10px] font-bold text-blue-700">{attDate === today ? 'PRESENT TODAY' : 'PRESENT'}</div>
             <div className="text-base font-extrabold text-blue-800 tabular-nums">
@@ -115,11 +148,15 @@ export const OverviewKpiCards: React.FC<{
             <div className="text-[10px] font-bold text-slate-600">ABSENT / LEAVE</div>
             <div className="text-base font-extrabold text-slate-700 tabular-nums">{staffAbsentLeave}</div>
           </div>
+          <div className="rounded-xl bg-slate-100 px-2 py-2 text-center" title="No attendance marked yet">
+            <div className="text-[10px] font-bold text-slate-600">NOT MARKED</div>
+            <div className="text-base font-extrabold text-slate-700 tabular-nums">{staffNotMarked}</div>
+          </div>
         </div>
-      </div>
+      </KpiCard>
 
       {/* ---- Fee collection for the selected month(s) ---- */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <KpiCard card="fees" label="View fees">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
@@ -145,7 +182,7 @@ export const OverviewKpiCards: React.FC<{
             Pending: {formatPKR(feePending)}
           </span>
         </div>
-      </div>
+      </KpiCard>
     </div>
   );
 };

@@ -98,6 +98,7 @@ const AdminOverview: React.FC = () => {
             fees={fees}
             attendanceDate={attDate}
             feeMonths={feeMonths}
+            cardTargets={{ students: 'students', staff: 'staff', fees: 'fees' }}
           />
         </div>
         <div className="lg:sticky lg:top-[4.5rem]">

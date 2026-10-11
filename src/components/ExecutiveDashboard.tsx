@@ -42,7 +42,13 @@ export const ExecutiveDashboard: React.FC = () => {
       {/* KPI cards (left) + date filter (right, sticky) */}
       <div className="grid gap-4 lg:grid-cols-3 items-start">
         <div className="lg:col-span-2">
-          <OverviewKpiCards students={students} staff={staff} attendance={attendance} fees={fees} />
+          <OverviewKpiCards
+            students={students}
+            staff={staff}
+            attendance={attendance}
+            fees={fees}
+            cardTargets={{ staff: 'staff', fees: 'fees' }}
+          />
         </div>
         <div className="lg:sticky lg:top-[4.5rem]">
           <DateFilter filter={filter} onChange={setFilter} compact />

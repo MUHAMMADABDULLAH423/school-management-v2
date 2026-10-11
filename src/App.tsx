@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
   GraduationCap, UserCog, CalendarCheck, ClipboardList,
@@ -19,6 +19,7 @@ import { StaffDashboard } from './dashboards/StaffDashboard';
 import { ParentDashboard } from './dashboards/ParentDashboard';
 import { seedDemoData } from './services/seed';
 import { UserRole } from './types';
+import { APP_NAV_EVENT } from './utils/navigate';
 import {
   Card, Modal, Field, TextInput, PrimaryButton, Spinner, EmptyState,
   Avatar, PasswordInput,
@@ -156,6 +157,16 @@ const Shell: React.FC = () => {
   const [view, setView] = useState('__default__');
   const [pwChanged, setPwChanged] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Deep components (overview KPI cards) navigate via `navigateTo(tabId)`.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tabId = (e as CustomEvent<string>).detail;
+      if (typeof tabId === 'string' && tabId) setView(tabId);
+    };
+    window.addEventListener(APP_NAV_EVENT, handler);
+    return () => window.removeEventListener(APP_NAV_EVENT, handler);
+  }, []);
 
   if (isLoading || schoolLoading) {
     return (

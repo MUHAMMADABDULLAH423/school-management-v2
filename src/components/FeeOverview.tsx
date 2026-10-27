@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PiggyBank, Wallet, TrendingUp, ReceiptText, ExternalLink } from 'lucide-react';
 import {
-  FeeVoucher, Student, DateFilterState, FeeStatus, monthInFilter, formatPKR, filterMonths,
+  FeeVoucher, Student, DateFilterState, FeeStatus, monthInFilter, formatPKR,
 } from '../types';
 import { Card, CardHeader, Badge, EmptyState, Table, Tabs, Avatar, SearchInput, Select } from './ui';
 import { monthLabel } from './DateFilter';
-import { LineChart } from './LineChart';
+import { DonutChart } from './DonutChart';
 
 const statusTone: Record<FeeStatus, 'green' | 'amber' | 'red' | 'violet'> = {
   Paid: 'green',
@@ -145,24 +145,13 @@ export const FeeOverview: React.FC<{
     return list;
   }, [filtered, tab, mode, slice]);
 
-  /** Vouchers behind the selected line (click a line to drill down). */
+  /** Vouchers behind the selected donut slice (click a slice to drill down). */
   const sliceRows = useMemo(() => {
     if (!slice) return [];
     return filtered.filter((f) =>
       slice === 'collected' ? (f.paidAmount || 0) > 0 : (f.dueAmount || 0) > 0
     );
   }, [filtered, slice]);
-
-  /** Months covered by the filter, and collected/pending per month (line chart). */
-  const chartMonths = useMemo(() => filterMonths(filter), [filter]);
-  const lineSeries = useMemo(() => {
-    const sumFor = (m: string, pick: (f: FeeVoucher) => number) =>
-      filtered.filter((f) => f.month === m).reduce((a, f) => a + pick(f), 0);
-    return [
-      { key: 'collected', label: 'Collected', values: chartMonths.map((m) => sumFor(m, (f) => f.paidAmount || 0)), color: '#10b981' },
-      { key: 'pending', label: 'Pending', values: chartMonths.map((m) => sumFor(m, (f) => f.dueAmount || 0)), color: '#f43f5e' },
-    ];
-  }, [filtered, chartMonths]);
 
   return (
     <Card>
@@ -240,12 +229,16 @@ export const FeeOverview: React.FC<{
         </>
         )}
 
-        {/* Line chart: every mode. Chart mode navigates to the window; window mode
+        {/* Donut chart: every mode. Chart mode navigates to the window; window mode
             toggles (re-click closes); full mode drills down inline. */}
         <div className={`rounded-2xl border border-slate-200 px-5 py-4 ${mode === 'chart' ? '' : 'mb-5'}`}>
-          <LineChart
-            series={lineSeries}
-            xLabels={chartMonths.map(monthLabel)}
+          <DonutChart
+            segments={[
+              { key: 'collected', label: 'Collected', value: totals.collected, color: '#10b981' },
+              { key: 'pending', label: 'Pending', value: totals.pending, color: '#f43f5e' },
+            ]}
+            centerLabel="billed"
+            centerValue={formatPKR(totals.billed)}
             selectedKey={mode === 'chart' ? null : slice}
             onSelect={(k) => {
               if (mode === 'chart') {
@@ -255,12 +248,11 @@ export const FeeOverview: React.FC<{
               }
             }}
             formatValue={formatPKR}
-            yFormat={(v) => (v >= 1000 ? `PKR ${Math.round(v / 1000)}k` : `PKR ${v}`)}
             hint={
               mode === 'chart'
-                ? 'Click a line to open its detail.'
+                ? 'Click a slice to open its detail.'
                 : mode === 'window'
-                ? 'Click a line to switch — click the selected line again to go back.'
+                ? 'Click a slice to switch — click the selected slice again to go back.'
                 : undefined
             }
           />

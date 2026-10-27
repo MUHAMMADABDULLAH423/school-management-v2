@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { UserCheck, UserX, Clock } from 'lucide-react';
 import {
-  AttendanceRecord, Student, DateFilterState, AttendanceStatus, dateInFilter, filterDateList,
+  AttendanceRecord, Student, DateFilterState, AttendanceStatus, dateInFilter,
 } from '../types';
 import { Card, CardHeader, Badge, EmptyState, Table, Avatar, SearchInput, Select } from './ui';
-import { LineChart } from './LineChart';
+import { DonutChart } from './DonutChart';
 
 const statusTone: Record<AttendanceStatus, 'green' | 'red' | 'amber' | 'blue' | 'slate'> = {
   Present: 'green',
@@ -84,7 +84,12 @@ export const AttendanceRoster: React.FC<{
     return [...set].sort();
   }, [period]);
 
-  /** Records behind the selected line (click a line to drill down). */
+  const leaveCount = useMemo(
+    () => period.filter((r) => r.status === 'Leave').length,
+    [period]
+  );
+
+  /** Records behind the selected donut slice (click a slice to drill down). */
   const sliceRows = useMemo(() => {
     if (!slice) return [];
     if (slice === 'present') {
@@ -93,24 +98,6 @@ export const AttendanceRoster: React.FC<{
     const want: AttendanceStatus = slice === 'absent' ? 'Absent' : slice === 'late' ? 'Late' : 'Leave';
     return period.filter((r) => r.status === want);
   }, [period, slice]);
-
-  /** Dates covered by the filter, and status counts per day (line chart). */
-  const chartDates = useMemo(() => filterDateList(filter), [filter]);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const dateLabel = (d: string) => {
-    const [, m, day] = d.split('-');
-    return `${parseInt(day, 10)} ${monthNames[parseInt(m, 10) - 1] || ''}`;
-  };
-  const lineSeries = useMemo(() => {
-    const countOn = (d: string, pred: (r: AttendanceRecord) => boolean) =>
-      period.filter((r) => r.date === d && pred(r)).length;
-    return [
-      { key: 'present', label: 'Present', values: chartDates.map((d) => countOn(d, (r) => r.status === 'Present' || r.status === 'HalfDay')), color: '#10b981' },
-      { key: 'absent', label: 'Absent', values: chartDates.map((d) => countOn(d, (r) => r.status === 'Absent')), color: '#f43f5e' },
-      { key: 'late', label: 'Late', values: chartDates.map((d) => countOn(d, (r) => r.status === 'Late')), color: '#f59e0b' },
-      { key: 'leave', label: 'Leave', values: chartDates.map((d) => countOn(d, (r) => r.status === 'Leave')), color: '#64748b' },
-    ];
-  }, [period, chartDates]);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -147,12 +134,18 @@ export const AttendanceRoster: React.FC<{
         pill={filterLabel}
       />
       <div className="px-5 py-4">
-        {/* Line chart: every mode. Chart mode navigates to the window; window mode
+        {/* Donut chart: every mode. Chart mode navigates to the window; window mode
             toggles (re-click closes); full mode drills down inline. */}
         <div className={`rounded-2xl border border-slate-200 px-5 py-4 ${mode === 'chart' ? '' : 'mb-4'}`}>
-          <LineChart
-            series={lineSeries}
-            xLabels={chartDates.map(dateLabel)}
+          <DonutChart
+            segments={[
+              { key: 'present', label: 'Present', value: counts.present, color: '#10b981' },
+              { key: 'absent', label: 'Absent', value: counts.absent, color: '#f43f5e' },
+              { key: 'late', label: 'Late', value: counts.late, color: '#f59e0b' },
+              { key: 'leave', label: 'Leave', value: leaveCount, color: '#64748b' },
+            ]}
+            centerLabel="records"
+            centerValue={String(counts.total)}
             selectedKey={mode === 'chart' ? null : slice}
             onSelect={(k) => {
               if (mode === 'chart') {
@@ -163,9 +156,9 @@ export const AttendanceRoster: React.FC<{
             }}
             hint={
               mode === 'chart'
-                ? 'Click a line to open its detail.'
+                ? 'Click a slice to open its detail.'
                 : mode === 'window'
-                ? 'Click a line to switch — click the selected line again to go back.'
+                ? 'Click a slice to switch — click the selected slice again to go back.'
                 : undefined
             }
           />

@@ -3,7 +3,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSchool } from '../hooks/useFirestore';
 import { SchoolBrand } from './SchoolBrand';
-import { useConfirm } from './ui';
+import { Avatar, useConfirm } from './ui';
 
 export interface NavItem {
   id: string;
@@ -48,6 +48,27 @@ export const Sidebar: React.FC<{
     setDrawerOpen(false);
     onNavigate(id);
   };
+
+  // Sidebar footer: for the principal the user chip lives here (sign-out moved
+  // to the top bar); every other role keeps the sign-out button here.
+  const sidebarFooter = currentUser && currentUser.role === 'principal' ? (
+    <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <Avatar src={currentUser.photoURL} name={currentUser.name} size={34} />
+      <div className="leading-tight min-w-0">
+        <div className="text-xs font-bold text-white truncate">{currentUser.name}</div>
+        <div className="text-[10px] text-slate-400 capitalize">{currentUser.role}</div>
+      </div>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-300 hover:bg-rose-900/40 hover:text-rose-200 transition-colors"
+    >
+      <LogOut className="w-5 h-5" />
+      Sign out
+    </button>
+  );
 
   // Close the drawer on Escape and lock body scroll while it is open.
   useEffect(() => {
@@ -103,14 +124,7 @@ export const Sidebar: React.FC<{
         </nav>
 
         <div className="p-3 border-t border-slate-800">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-300 hover:bg-rose-900/40 hover:text-rose-200 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            Sign out
-          </button>
+          {sidebarFooter}
         </div>
       </aside>
       )}
@@ -187,14 +201,7 @@ export const Sidebar: React.FC<{
           </nav>
 
           <div className="p-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-300 hover:bg-rose-900/40 hover:text-rose-200 transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              Sign out
-            </button>
+            {sidebarFooter}
           </div>
         </aside>
       </div>

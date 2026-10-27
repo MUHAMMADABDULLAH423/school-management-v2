@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
   GraduationCap, UserCog, CalendarCheck, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
-  Menu, MapPin, Layers,
+  Menu, MapPin, Layers, LogOut,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSchool } from './hooks/useFirestore';
@@ -22,7 +22,7 @@ import { UserRole } from './types';
 import { APP_NAV_EVENT } from './utils/navigate';
 import {
   Card, Modal, Field, TextInput, PrimaryButton, Spinner, EmptyState,
-  Avatar, PasswordInput,
+  Avatar, PasswordInput, useConfirm,
 } from './components/ui';
 
 const iconCls = 'w-4 h-4';
@@ -33,11 +33,11 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
     { id: 'classes', label: 'Classes', icon: <Layers className={iconCls} /> },
-    { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
-    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
     { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
+    { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
+    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
   ],
   admin: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },
@@ -152,8 +152,21 @@ const FirstRunSetup: React.FC = () => {
 };
 
 const Shell: React.FC = () => {
-  const { currentUser, isLoading, firebaseReady } = useAuth();
+  const { currentUser, isLoading, firebaseReady, logout } = useAuth();
   const { school, loading: schoolLoading } = useSchool();
+  const { ask, dialog } = useConfirm();
+
+  // Principal portal: sign-out lives in the top bar (swapped with the user chip).
+  const handleSignOut = () => {
+    ask({
+      title: 'Sign out?',
+      message: 'You will be signed out of the school portal.',
+      confirmLabel: 'Sign out',
+      onConfirm: () => {
+        void logout();
+      },
+    });
+  };
   const [view, setView] = useState('__default__');
   const [pwChanged, setPwChanged] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -227,7 +240,16 @@ const Shell: React.FC = () => {
         <span className="hidden lg:block text-xs font-semibold text-slate-300 tabular-nums">
           {today}
         </span>
-        {currentUser && (
+        {currentUser && role === 'principal' ? (
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-semibold text-white transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        ) : currentUser ? (
           <div className="flex items-center gap-2.5 pl-1">
             <Avatar src={currentUser.photoURL} name={currentUser.name} size={34} />
             <div className="leading-tight">
@@ -237,7 +259,7 @@ const Shell: React.FC = () => {
               <div className="text-[10px] text-slate-400 capitalize">{currentUser.role}</div>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="md:flex">
@@ -258,6 +280,7 @@ const Shell: React.FC = () => {
           </div>
         </div>
       </div>
+      {dialog}
     </div>
   );
 };

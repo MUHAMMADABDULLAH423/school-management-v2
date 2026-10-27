@@ -311,6 +311,31 @@ export function filterAttendanceDate(f: DateFilterState): string {
   return todayStr();
 }
 
+const fmtDate = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Calendar dates covered by a filter (for trend charts). Capped at 366 days. */
+export function filterDateList(f: DateFilterState): string[] {
+  if (f.mode === 'single') return [f.singleDate];
+  if (f.mode === 'range') {
+    const out: string[] = [];
+    const d = new Date(`${f.startDate}T12:00:00`);
+    const end = new Date(`${f.endDate}T12:00:00`);
+    while (d <= end && out.length < 366) {
+      out.push(fmtDate(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+  const out: string[] = [];
+  for (const m of [...f.selectedMonths].sort()) {
+    const [y, mo] = m.split('-').map(Number);
+    const days = new Date(y, mo, 0).getDate();
+    for (let day = 1; day <= days; day++) out.push(`${m}-${String(day).padStart(2, '0')}`);
+  }
+  return out;
+}
+
 export const formatPKR = (n: number): string => `PKR ${Math.round(n).toLocaleString('en-PK')}`;
 
 export const gradeFor = (obtained: number, total: number): string => {

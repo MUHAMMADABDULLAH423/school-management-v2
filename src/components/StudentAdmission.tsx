@@ -4,18 +4,23 @@
  * Guarded by <RequireRole roles={['admin']}> at the dashboard level AND by
  * firestore.rules (students: write = admin only). Never render for principal.
  *
- * NOTE: parent portal login is created separately via UserManager. Linking is
- * automatic when the parent's login email matches this student's parentEmail
- * (fallback); optionally set `parentId` to the parent's auth uid as well.
+ * NOTE: the parent portal login is now auto-created on admission (see
+ * services/parentAccount): when a parentEmail is saved, a Firebase Auth login
+ * + `users` profile are created and the one-time temporary password is shown
+ * to the admin. Linking stays automatic — the parent sees children whose
+ * parentEmail matches their login email (fallback); optionally set `parentId`
+ * to the parent's auth uid as well.
  */
 import React, { useMemo, useState } from 'react';
 import {
   addDoc, collection, doc, updateDoc,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff, Eye } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
+import { ensureParentAccount, ParentAccountResult } from '../services/parentAccount';
+import { waNumber } from './FeeVoucherPrint';
 import { Student, ClassSection, FeeStatus } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, Select, PrimaryButton, GhostButton,
@@ -75,6 +80,9 @@ const StudentAdmission: React.FC = () => {
   const [photoRecordId, setPhotoRecordId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Result of the parent-login auto-create for the last save (shown as a banner). */
+  const [parentResult, setParentResult] = useState<ParentAccountResult | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const set = (k: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -156,6 +164,7 @@ const StudentAdmission: React.FC = () => {
 
   const openAdd = () => {
     setEditing(null);
+    setParentResult(null);
     setForm({ ...emptyForm(), admissionNo: nextAdmissionNo() });
     setPhotoRecordId(`new-${Date.now()}`); // fresh record id once per modal open
     setError('');
@@ -164,6 +173,7 @@ const StudentAdmission: React.FC = () => {
 
   const openEdit = (s: Student) => {
     setEditing(s);
+    setParentResult(null);
     setForm({
       name: s.name || '', photo: s.photo || '', class: s.class || '', section: s.section || '',
       rollNumber: s.rollNumber || '', admissionNo: s.admissionNo || '', dob: s.dob || '', gender: s.gender || 'Male',
@@ -231,6 +241,24 @@ const StudentAdmission: React.FC = () => {
         await auditLog(currentUser.uid, currentUser.name, 'Student admitted',
           `Admitted ${payload.name} (${payload.rollNumber}, ${payload.class}-${payload.section})`);
       }
+      // Parent login auto-create: runs AFTER the student is saved, and never
+      // fails the admission — its outcome is shown as a banner instead.
+      if (payload.parentEmail) {
+        const pr = await ensureParentAccount({
+          email: payload.parentEmail,
+          parentName: payload.parentName,
+          studentName: payload.name,
+          phone: payload.parentWhatsApp || payload.parentPhone,
+          schoolId: currentUser.schoolId || 'main',
+        });
+        setParentResult(pr);
+        if (pr.status === 'created') {
+          await auditLog(currentUser.uid, currentUser.name, 'Parent login created',
+            `Created parent login for ${payload.parentName || payload.name} (${pr.email}) — temporary password shown once to admin`);
+        }
+      } else {
+        setParentResult(null);
+      }
       setModalOpen(false);
     } catch (e: any) {
       setError(e?.message || 'Save failed. Please try again.');
@@ -260,6 +288,22 @@ const StudentAdmission: React.FC = () => {
     }
   };
 
+  const copyTempPassword = async () => {
+    if (parentResult?.status !== 'created') return;
+    try {
+      await navigator.clipboard.writeText(parentResult.tempPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — the password stays visible to type out */ }
+  };
+
+  const parentWaLink =
+    parentResult?.status === 'created' && parentResult.phone
+      ? `https://wa.me/${waNumber(parentResult.phone)}?text=${encodeURIComponent(
+          `Assalam-o-Alaikum, ${school?.name || 'school'} parent portal ka login ban gaya hai.\nBacha: ${parentResult.studentName}\nEmail: ${parentResult.email}\nTemporary password: ${parentResult.tempPassword}\nLink: ${window.location.origin}\nPehli dafa login karke apna password set kar lein.`
+        )}`
+      : '';
+
   return (
     <div>
       <Card>
@@ -283,6 +327,88 @@ const StudentAdmission: React.FC = () => {
             ))}
           </Select>
         </div>
+        {parentResult?.status === 'created' && (
+          <div className="mx-5 mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-bold text-emerald-900">Parent login ban gaya hai</div>
+              <button
+                type="button"
+                onClick={() => setParentResult(null)}
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-800">
+              Ye temporary password dobara nahi dikhega — abhi copy ya WhatsApp kar lein.
+              Parent pehli dafa login pe apna password set karega.
+            </p>
+            <div className="mt-2 space-y-1.5 text-sm text-emerald-900">
+              <div>
+                Email: <b className="break-all">{parentResult.email}</b>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Temporary password:{' '}
+                  <code className="px-2 py-0.5 rounded bg-white border border-emerald-200 font-bold tracking-wide">
+                    {parentResult.tempPassword}
+                  </code>
+                </span>
+                <button
+                  type="button"
+                  onClick={copyTempPassword}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                {parentWaLink && (
+                  <a
+                    href={parentWaLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp pe bhejo
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {parentResult?.status === 'exists' && (
+          <div className="mx-5 mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-start justify-between gap-2">
+            <p className="text-sm text-slate-700">
+              Is email (<b className="break-all">{parentResult.email}</b>) ka parent account pehle se
+              mojood hai — naya password nahi banaya gaya.
+            </p>
+            <button
+              type="button"
+              onClick={() => setParentResult(null)}
+              className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        {parentResult?.status === 'failed' && (
+          <div className="mx-5 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-2">
+            <p className="text-sm text-amber-900">
+              Student save ho gaya, lekin parent login nahi ban saka: {parentResult.error}{' '}
+              Dobara save karke koshish karein, ya Firebase Console se bana lein.
+            </p>
+            <button
+              type="button"
+              onClick={() => setParentResult(null)}
+              className="p-1 rounded-lg text-amber-700 hover:bg-amber-100 shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {loading ? (
           <Spinner />
         ) : filtered.length === 0 ? (

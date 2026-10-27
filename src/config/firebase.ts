@@ -25,6 +25,15 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+/**
+ * Secondary app instance with its own Auth state, used ONLY to create Firebase
+ * Auth logins for parents (see services/parentAccount). Creating a user on the
+ * primary `auth` would sign the signed-in admin out — the secondary instance
+ * keeps the admin's session untouched. Signed out immediately after each use.
+ */
+const secondaryApp = initializeApp(firebaseConfig, 'secondary');
+export const secondaryAuth = getAuth(secondaryApp);
+
 /** True when the developer has replaced the placeholder config. */
 export const isFirebaseConfigured =
   !firebaseConfig.apiKey.startsWith('YOUR_') && !firebaseConfig.projectId.startsWith('YOUR_');

@@ -193,31 +193,35 @@ export const AttendanceRoster: React.FC<{
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <SearchInput value={q} onChange={setQ} placeholder="Search name or roll no…" />
-          <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
-            <option value="All">Status: All</option>
-            <option value="Present">Present</option>
-            <option value="Absent">Absent</option>
-            <option value="Late">Late</option>
-          </Select>
-          <Select value={cls} onChange={(e) => setCls(e.target.value)}>
-            <option value="All">Class: All</option>
-            {classSections.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {/* Filters + full list show only when no chart slice is open —
+            otherwise the same records would appear twice (drill-down + list). */}
+        {!slice && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <SearchInput value={q} onChange={setQ} placeholder="Search name or roll no…" />
+              <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+                <option value="All">Status: All</option>
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Late">Late</option>
+              </Select>
+              <Select value={cls} onChange={(e) => setCls(e.target.value)}>
+                <option value="All">Class: All</option>
+                {classSections.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-        {rows.length === 0 ? (
-          <EmptyState
-            title="No attendance records"
-            hint="No records match the selected period and filters."
-          />
-        ) : (
-          <Table head={['Student', 'Class', 'Date', 'Status', 'Marked by']}>
+            {rows.length === 0 ? (
+              <EmptyState
+                title="No attendance records"
+                hint="No records match the selected period and filters."
+              />
+            ) : (
+              <Table head={['Student', 'Class', 'Date', 'Status', 'Marked by']}>
             {rows.map((r) => {
               const s = r.studentId ? studentMap.get(r.studentId) : undefined;
               return (
@@ -242,7 +246,9 @@ export const AttendanceRoster: React.FC<{
                 </tr>
               );
             })}
-          </Table>
+              </Table>
+            )}
+          </>
         )}
       </div>
     </Card>

@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PiggyBank, Wallet, TrendingUp, ReceiptText, ExternalLink } from 'lucide-react';
 import {
   FeeVoucher, Student, DateFilterState, FeeStatus, monthInFilter, formatPKR,
 } from '../types';
-import { Card, CardHeader, Badge, EmptyState, Table, Tabs, Avatar } from './ui';
+import { Card, CardHeader, Badge, EmptyState, Table, Tabs, Avatar, SearchInput, Select } from './ui';
 import { monthLabel } from './DateFilter';
 import { DonutChart } from './DonutChart';
 
@@ -56,13 +56,45 @@ export const FeeOverview: React.FC<{
   const [tab, setTab] = useState<'All' | FeeStatus>('All');
   /** Donut slice selected for drill-down; null = chart only. */
   const [slice, setSlice] = useState<'collected' | 'pending' | null>(null);
+  /** Class-wise filter + search, like the attendance roster. */
+  const [cls, setCls] = useState('All');
+  const [q, setQ] = useState('');
 
   const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
-  const filtered = useMemo(
+  // Class options are period-scoped, so reset the class filter when the period changes.
+  useEffect(() => { setCls('All'); }, [filter]);
+
+  /** Vouchers in the selected period, before class/search filters. */
+  const periodFees = useMemo(
     () => fees.filter((f) => monthInFilter(f.month, filter)),
     [fees, filter]
   );
+
+  const classOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of periodFees) {
+      const s = studentMap.get(f.studentId);
+      if (s) set.add(`${s.class}-${s.section}`);
+    }
+    return [...set].sort();
+  }, [periodFees, studentMap]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return periodFees.filter((f) => {
+      if (cls !== 'All') {
+        const s = studentMap.get(f.studentId);
+        if (!s || `${s.class}-${s.section}` !== cls) return false;
+      }
+      if (needle) {
+        const s = studentMap.get(f.studentId);
+        const hay = `${f.voucherNumber} ${s?.name || ''} ${s?.rollNumber || ''}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [periodFees, cls, q, studentMap]);
 
   const totals = useMemo(() => {
     const billed = filtered.reduce((a, f) => a + f.totalAmount, 0);
@@ -120,6 +152,19 @@ export const FeeOverview: React.FC<{
       />
 
       <div className="px-5 py-4">
+        {/* Class + search filters first (like the attendance roster) — they drive the cards, chart and table below */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+          <SearchInput value={q} onChange={setQ} placeholder="Search voucher, student, roll…" />
+          <Select value={cls} onChange={(e) => setCls(e.target.value)}>
+            <option value="All">Class: All</option>
+            {classOptions.map((c) => (
+              <option key={c} value={c}>
+                Class: {c}
+              </option>
+            ))}
+          </Select>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
           <MetricCard
             label="Collected"
@@ -214,21 +259,25 @@ export const FeeOverview: React.FC<{
           )}
         </div>
 
-        <Tabs
-          tabs={statusTabs.map((s) => ({
-            id: s,
-            label: `${s} (${tabCounts.get(s) || 0})`,
-          }))}
-          active={tab}
-          onChange={(id) => setTab(id as 'All' | FeeStatus)}
-        />
+        {/* Tabs + full table show only when no chart slice is open —
+            otherwise the same vouchers would appear twice (drill-down + table). */}
+        {!slice && (
+          <>
+            <Tabs
+              tabs={statusTabs.map((s) => ({
+                id: s,
+                label: `${s} (${tabCounts.get(s) || 0})`,
+              }))}
+              active={tab}
+              onChange={(id) => setTab(id as 'All' | FeeStatus)}
+            />
 
-        {rows.length === 0 ? (
-          <EmptyState title="No fee vouchers" hint="No vouchers match the selected period and status." />
-        ) : (
-          <Table
-            head={['Voucher #', 'Student', 'Class', 'Month', 'Total', 'Paid', 'Due', 'Status']}
-          >
+            {rows.length === 0 ? (
+              <EmptyState title="No fee vouchers" hint="No vouchers match the selected period and status." />
+            ) : (
+              <Table
+                head={['Voucher #', 'Student', 'Class', 'Month', 'Total', 'Paid', 'Due', 'Status']}
+              >
             {rows.map((f) => {
               const s = studentMap.get(f.studentId);
               return (
@@ -266,7 +315,9 @@ export const FeeOverview: React.FC<{
                 </tr>
               );
             })}
-          </Table>
+              </Table>
+            )}
+          </>
         )}
       </div>
     </Card>

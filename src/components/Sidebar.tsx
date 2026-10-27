@@ -49,9 +49,9 @@ export const Sidebar: React.FC<{
     onNavigate(id);
   };
 
-  // Sidebar footer: for the principal the user chip lives here (sign-out moved
+  // Sidebar footer: for principal/admin the user chip lives here (sign-out moved
   // to the top bar); every other role keeps the sign-out button here.
-  const sidebarFooter = currentUser && currentUser.role === 'principal' ? (
+  const sidebarFooter = currentUser && (currentUser.role === 'principal' || currentUser.role === 'admin') ? (
     <div className="flex items-center gap-2.5 px-3 py-2.5">
       <Avatar src={currentUser.photoURL} name={currentUser.name} size={34} />
       <div className="leading-tight min-w-0">

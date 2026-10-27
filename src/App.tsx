@@ -156,7 +156,7 @@ const Shell: React.FC = () => {
   const { school, loading: schoolLoading } = useSchool();
   const { ask, dialog } = useConfirm();
 
-  // Principal portal: sign-out lives in the top bar (swapped with the user chip).
+  // Principal/admin portals: sign-out lives in the top bar (swapped with the user chip).
   const handleSignOut = () => {
     ask({
       title: 'Sign out?',
@@ -240,7 +240,7 @@ const Shell: React.FC = () => {
         <span className="hidden lg:block text-xs font-semibold text-slate-300 tabular-nums">
           {today}
         </span>
-        {currentUser && role === 'principal' ? (
+        {currentUser && (role === 'principal' || role === 'admin') ? (
           <button
             type="button"
             onClick={handleSignOut}

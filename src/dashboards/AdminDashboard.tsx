@@ -89,8 +89,8 @@ const AdminOverview: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* KPI cards (left) + date filter (right, sticky) — like the principal overview */}
-      <div className="grid gap-4 lg:grid-cols-3 items-start">
-        <div className="lg:col-span-2">
+      <div className="grid gap-3 lg:grid-cols-4 items-start">
+        <div className="lg:col-span-3">
           <OverviewKpiCards
             students={students}
             staff={staff}

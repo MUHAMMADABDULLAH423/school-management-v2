@@ -9,14 +9,21 @@ import {
 } from '../types';
 import { Spinner, StatCard, Card, CardHeader } from './ui';
 import { DateFilter, filterLabelFor } from './DateFilter';
-import { FeeOverview } from './FeeOverview';
-import { AttendanceRoster } from './AttendanceRoster';
+import { FeeOverview, FeeSlice } from './FeeOverview';
+import { AttendanceRoster, AttendanceSlice } from './AttendanceRoster';
 import { OverviewKpiCards } from './OverviewKpiCards';
+
+/** Chart drill-down target: clicking a chart slice opens its detail section. */
+type DetailState =
+  | { kind: 'fees'; slice: FeeSlice }
+  | { kind: 'attendance'; slice: AttendanceSlice };
 
 const iconCls = 'w-5 h-5';
 
 export const ExecutiveDashboard: React.FC = () => {
   const [filter, setFilter] = useState(defaultDateFilter());
+  /** Open detail section (null = chart-only overview). */
+  const [detail, setDetail] = useState<DetailState | null>(null);
   const { data: students, loading: l1 } = useCollection<Student>('students');
   const { data: staff, loading: l2 } = useCollection<StaffMember>('staff');
   const { data: attendance, loading: l3 } = useCollection<AttendanceRecord>('attendance');
@@ -61,38 +68,84 @@ export const ExecutiveDashboard: React.FC = () => {
         </div>
       </div>
 
-      <FeeOverview fees={fees} students={students} filter={filter} filterLabel={label} />
+      {/* Chart-only overview: clicking a slice opens its detail section.
+          The detail section replaces the charts (Back returns to the charts). */}
+      {detail ? (
+        detail.kind === 'fees' ? (
+          <FeeOverview
+            key="fee-detail"
+            fees={fees}
+            students={students}
+            filter={filter}
+            filterLabel={label}
+            detailMode
+            initialSlice={detail.slice}
+            onBack={() => setDetail(null)}
+          />
+        ) : (
+          <AttendanceRoster
+            key="attendance-detail"
+            records={attendance}
+            students={students}
+            filter={filter}
+            filterLabel={label}
+            detailMode
+            initialSlice={detail.slice}
+            onBack={() => setDetail(null)}
+          />
+        )
+      ) : (
+        <>
+          <FeeOverview
+            key="fee-chart"
+            fees={fees}
+            students={students}
+            filter={filter}
+            filterLabel={label}
+            chartOnly
+            onSliceClick={(slice) => setDetail({ kind: 'fees', slice })}
+          />
 
-      <AttendanceRoster records={attendance} students={students} filter={filter} filterLabel={label} />
+          <AttendanceRoster
+            key="attendance-chart"
+            records={attendance}
+            students={students}
+            filter={filter}
+            filterLabel={label}
+            chartOnly
+            onSliceClick={(slice) => setDetail({ kind: 'attendance', slice })}
+          />
 
-      {/* Staff attendance summary strip */}
-      <Card>
-        <CardHeader
-          title="Staff Attendance"
-          subtitle="Today's staff check-ins"
-          pill={todayStr()}
-        />
-        <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <StatCard
-            label="Present"
-            value={String(staffStrip.present)}
-            icon={<UserCheck className={iconCls} />}
-            tone="emerald"
-          />
-          <StatCard
-            label="Late"
-            value={String(staffStrip.late)}
-            icon={<Clock className={iconCls} />}
-            tone="amber"
-          />
-          <StatCard
-            label="Absent"
-            value={String(staffStrip.absent)}
-            icon={<UserX className={iconCls} />}
-            tone="rose"
-          />
-        </div>
-      </Card>
+          {/* Staff attendance summary strip */}
+          <Card>
+            <CardHeader
+              title="Staff Attendance"
+              subtitle="Today's staff check-ins"
+              pill={todayStr()}
+            />
+            <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <StatCard
+                label="Present"
+                value={String(staffStrip.present)}
+                icon={<UserCheck className={iconCls} />}
+                tone="emerald"
+              />
+              <StatCard
+                label="Late"
+                value={String(staffStrip.late)}
+                icon={<Clock className={iconCls} />}
+                tone="amber"
+              />
+              <StatCard
+                label="Absent"
+                value={String(staffStrip.absent)}
+                icon={<UserX className={iconCls} />}
+                tone="rose"
+              />
+            </div>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

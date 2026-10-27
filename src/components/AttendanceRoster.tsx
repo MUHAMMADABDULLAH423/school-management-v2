@@ -16,6 +16,8 @@ const statusTone: Record<AttendanceStatus, 'green' | 'red' | 'amber' | 'blue' | 
 
 type StatusFilter = 'All' | 'Present' | 'Absent' | 'Late';
 
+export type AttendanceSlice = 'present' | 'absent' | 'late' | 'leave';
+
 const CountChip: React.FC<{
   label: string;
   value: number;
@@ -34,12 +36,19 @@ export const AttendanceRoster: React.FC<{
   students: Student[];
   filter: DateFilterState;
   filterLabel: string;
-}> = ({ records, students, filter, filterLabel }) => {
+  /** Main overview: chart only — clicking a slice navigates to the detail section. */
+  chartOnly?: boolean;
+  onSliceClick?: (slice: AttendanceSlice) => void;
+  /** Detail section: no chart, Back button, slice pre-selected as a list filter. */
+  detailMode?: boolean;
+  initialSlice?: AttendanceSlice | null;
+  onBack?: () => void;
+}> = ({ records, students, filter, filterLabel, chartOnly = false, onSliceClick, detailMode = false, initialSlice = null, onBack }) => {
   const [status, setStatus] = useState<StatusFilter>('All');
   const [cls, setCls] = useState('All');
   const [q, setQ] = useState('');
-  /** Donut slice selected for drill-down; null = chart only. */
-  const [slice, setSlice] = useState<'present' | 'absent' | 'late' | 'leave' | null>(null);
+  /** Donut slice selected for drill-down / detail filter; null = all. */
+  const [slice, setSlice] = useState<AttendanceSlice | null>(initialSlice);
 
   const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
@@ -85,7 +94,7 @@ export const AttendanceRoster: React.FC<{
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return period.filter((r) => {
+    let list = period.filter((r) => {
       if (status !== 'All' && r.status !== status) return false;
       if (cls !== 'All' && r.classSection !== cls) return false;
       if (needle) {
@@ -95,31 +104,92 @@ export const AttendanceRoster: React.FC<{
       }
       return true;
     });
-  }, [period, status, cls, q, studentMap]);
+    // In the detail section the slice is a list filter (no separate drill-down list).
+    if (detailMode && slice) {
+      list = list.filter((r) =>
+        slice === 'present'
+          ? r.status === 'Present' || r.status === 'HalfDay'
+          : slice === 'absent'
+          ? r.status === 'Absent'
+          : slice === 'late'
+          ? r.status === 'Late'
+          : r.status === 'Leave'
+      );
+    }
+    return list;
+  }, [period, status, cls, q, studentMap, detailMode, slice]);
 
   return (
-    <Card>
-      <CardHeader
-        title="Attendance Roster"
-        subtitle="Student attendance for the selected period"
-        pill={filterLabel}
-      />
-      <div className="px-5 py-4">
-        {/* Donut chart: status mix, click a slice to see its records */}
-        <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-4">
-          <DonutChart
-            segments={[
-              { key: 'present', label: 'Present', value: counts.present, color: '#10b981' },
-              { key: 'absent', label: 'Absent', value: counts.absent, color: '#f43f5e' },
-              { key: 'late', label: 'Late', value: counts.late, color: '#f59e0b' },
-              { key: 'leave', label: 'Leave', value: leaveCount, color: '#64748b' },
-            ]}
-            centerLabel="records"
-            centerValue={String(counts.total)}
-            selectedKey={slice}
-            onSelect={(k) => setSlice(k as 'present' | 'absent' | 'late' | 'leave' | null)}
-          />
-          {slice && (
+    <>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-700 hover:text-indigo-900"
+        >
+          ← Back to overview
+        </button>
+      )}
+      <Card>
+        <CardHeader
+          title="Attendance Roster"
+          subtitle="Student attendance for the selected period"
+          pill={filterLabel}
+        />
+        <div className="px-5 py-4">
+          {/* Slice picker in the detail section (no chart there to click) */}
+          {detailMode && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {([
+                { key: null, label: 'All records' },
+                { key: 'present', label: 'Present' },
+                { key: 'absent', label: 'Absent' },
+                { key: 'late', label: 'Late' },
+                { key: 'leave', label: 'Leave' },
+              ] as const).map((opt) => (
+                <button
+                  key={String(opt.key)}
+                  type="button"
+                  onClick={() => setSlice(opt.key)}
+                  className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                    slice === opt.key
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Donut chart: hidden in the detail section (the slice picker replaces it) */}
+          {!detailMode && (
+          <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-4">
+            <DonutChart
+              segments={[
+                { key: 'present', label: 'Present', value: counts.present, color: '#10b981' },
+                { key: 'absent', label: 'Absent', value: counts.absent, color: '#f43f5e' },
+                { key: 'late', label: 'Late', value: counts.late, color: '#f59e0b' },
+                { key: 'leave', label: 'Leave', value: leaveCount, color: '#64748b' },
+              ]}
+              centerLabel="records"
+              centerValue={String(counts.total)}
+              selectedKey={chartOnly ? null : slice}
+              onSelect={(k) => {
+                if (chartOnly) {
+                  if (k) onSliceClick?.(k as AttendanceSlice);
+                } else {
+                  setSlice(k as AttendanceSlice | null);
+                }
+              }}
+              hint={chartOnly ? 'Click a slice to open its detail.' : undefined}
+            />
+          </div>
+          )}
+
+          {/* Inline drill-down: full view only (the detail section filters the main list instead) */}
+          {!chartOnly && !detailMode && slice && (
             <div className="mt-4 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-bold text-slate-800 capitalize">
@@ -164,8 +234,9 @@ export const AttendanceRoster: React.FC<{
               )}
             </div>
           )}
-        </div>
 
+        {/* Summary chips: full + detail views only — the chart-only overview shows just the chart */}
+        {!chartOnly && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <CountChip
             label="Present"
@@ -192,10 +263,11 @@ export const AttendanceRoster: React.FC<{
             </span>
           </span>
         </div>
+        )}
 
-        {/* Filters + full list show only when no chart slice is open —
-            otherwise the same records would appear twice (drill-down + list). */}
-        {!slice && (
+        {/* Filters + full list: in the detail section the slice filters the list;
+            in the full view the list hides while the drill-down is open. */}
+        {(detailMode || !slice) && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <SearchInput value={q} onChange={setQ} placeholder="Search name or roll no…" />
@@ -251,6 +323,7 @@ export const AttendanceRoster: React.FC<{
           </>
         )}
       </div>
-    </Card>
+      </Card>
+    </>
   );
 };

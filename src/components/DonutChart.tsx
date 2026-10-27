@@ -24,7 +24,8 @@ export const DonutChart: React.FC<{
   selectedKey?: string | null;
   onSelect?: (key: string | null) => void;
   formatValue?: (v: number) => string;
-}> = ({ segments, centerLabel, centerValue, selectedKey = null, onSelect, formatValue }) => {
+  hint?: string;
+}> = ({ segments, centerLabel, centerValue, selectedKey = null, onSelect, formatValue, hint }) => {
   const total = segments.reduce((a, s) => a + s.value, 0);
   const fmt = formatValue || ((v: number) => String(v));
 
@@ -97,7 +98,7 @@ export const DonutChart: React.FC<{
         {total === 0 && (
           <p className="text-xs text-slate-400 px-3">No data for the selected period.</p>
         )}
-        <p className="text-[11px] text-slate-400 px-3 pt-1">Click a slice or row to see its detail below.</p>
+        <p className="text-[11px] text-slate-400 px-3 pt-1">{hint || 'Click a slice or row to see its detail below.'}</p>
       </div>
     </div>
   );

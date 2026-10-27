@@ -46,16 +46,25 @@ const MetricCard: React.FC<{
   </Card>
 );
 
+export type FeeSlice = 'collected' | 'pending';
+
 export const FeeOverview: React.FC<{
   fees: FeeVoucher[];
   students: Student[];
   filter: DateFilterState;
   filterLabel: string;
   onOpenFees?: () => void;
-}> = ({ fees, students, filter, filterLabel, onOpenFees }) => {
+  /** Main overview: chart only — clicking a slice navigates to the detail section. */
+  chartOnly?: boolean;
+  onSliceClick?: (slice: FeeSlice) => void;
+  /** Detail section: no chart, Back button, slice pre-selected as a table filter. */
+  detailMode?: boolean;
+  initialSlice?: FeeSlice | null;
+  onBack?: () => void;
+}> = ({ fees, students, filter, filterLabel, onOpenFees, chartOnly = false, onSliceClick, detailMode = false, initialSlice = null, onBack }) => {
   const [tab, setTab] = useState<'All' | FeeStatus>('All');
-  /** Donut slice selected for drill-down; null = chart only. */
-  const [slice, setSlice] = useState<'collected' | 'pending' | null>(null);
+  /** Donut slice selected for drill-down / detail filter; null = all. */
+  const [slice, setSlice] = useState<FeeSlice | null>(initialSlice);
   /** Class-wise filter + search, like the attendance roster. */
   const [cls, setCls] = useState('All');
   const [q, setQ] = useState('');
@@ -118,10 +127,16 @@ export const FeeOverview: React.FC<{
     return counts;
   }, [filtered]);
 
-  const rows = useMemo(
-    () => filtered.filter((f) => tab === 'All' || f.status === tab),
-    [filtered, tab]
-  );
+  const rows = useMemo(() => {
+    let list = filtered.filter((f) => tab === 'All' || f.status === tab);
+    // In the detail section the slice is a table filter (no separate drill-down list).
+    if (detailMode && slice) {
+      list = list.filter((f) =>
+        slice === 'collected' ? (f.paidAmount || 0) > 0 : (f.dueAmount || 0) > 0
+      );
+    }
+    return list;
+  }, [filtered, tab, detailMode, slice]);
 
   /** Vouchers behind the selected donut slice (click a slice to drill down). */
   const sliceRows = useMemo(() => {
@@ -132,39 +147,76 @@ export const FeeOverview: React.FC<{
   }, [filtered, slice]);
 
   return (
-    <Card>
-      <CardHeader
-        title="Fee Overview"
-        subtitle="Billed vs collected vs pending for the selected period"
-        pill={filterLabel}
-        action={
-          onOpenFees ? (
-            <button
-              type="button"
-              onClick={onOpenFees}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open Fee Center
-            </button>
-          ) : undefined
-        }
-      />
+    <>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-700 hover:text-indigo-900"
+        >
+          ← Back to overview
+        </button>
+      )}
+      <Card>
+        <CardHeader
+          title="Fee Overview"
+          subtitle="Billed vs collected vs pending for the selected period"
+          pill={filterLabel}
+          action={
+            onOpenFees ? (
+              <button
+                type="button"
+                onClick={onOpenFees}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Fee Center
+              </button>
+            ) : undefined
+          }
+        />
 
-      <div className="px-5 py-4">
-        {/* Class + search filters first (like the attendance roster) — they drive the cards, chart and table below */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-          <SearchInput value={q} onChange={setQ} placeholder="Search voucher, student, roll…" />
-          <Select value={cls} onChange={(e) => setCls(e.target.value)}>
-            <option value="All">Class: All</option>
-            {classOptions.map((c) => (
-              <option key={c} value={c}>
-                Class: {c}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <div className="px-5 py-4">
+          {/* Slice picker in the detail section (no chart there to click) */}
+          {detailMode && (
+            <div className="flex flex-wrap gap-2 mb-5">
+              {([
+                { key: null, label: 'All vouchers' },
+                { key: 'collected', label: 'Collected' },
+                { key: 'pending', label: 'Pending' },
+              ] as const).map((opt) => (
+                <button
+                  key={String(opt.key)}
+                  type="button"
+                  onClick={() => setSlice(opt.key)}
+                  className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                    slice === opt.key
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
+          {/* Class + search filters — full and detail views only, never on the chart-only overview */}
+          {!chartOnly && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              <SearchInput value={q} onChange={setQ} placeholder="Search voucher, student, roll…" />
+              <Select value={cls} onChange={(e) => setCls(e.target.value)}>
+                <option value="All">Class: All</option>
+                {classOptions.map((c) => (
+                  <option key={c} value={c}>
+                    Class: {c}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+        {!chartOnly && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
           <MetricCard
             label="Collected"
@@ -202,9 +254,12 @@ export const FeeOverview: React.FC<{
             tone="indigo"
           />
         </div>
+        )}
 
-        {/* Donut chart: collected vs pending, click a slice to see its vouchers */}
-        <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-5">
+        {/* Donut chart: hidden in the detail section (the slice picker replaces it);
+            in chart-only mode a click navigates to the detail section. */}
+        {!detailMode && (
+        <div className={`rounded-2xl border border-slate-200 px-5 py-4 ${chartOnly ? '' : 'mb-5'}`}>
           <DonutChart
             segments={[
               { key: 'collected', label: 'Collected', value: totals.collected, color: '#10b981' },
@@ -212,12 +267,23 @@ export const FeeOverview: React.FC<{
             ]}
             centerLabel="billed"
             centerValue={formatPKR(totals.billed)}
-            selectedKey={slice}
-            onSelect={(k) => setSlice(k as 'collected' | 'pending' | null)}
+            selectedKey={chartOnly ? null : slice}
+            onSelect={(k) => {
+              if (chartOnly) {
+                if (k) onSliceClick?.(k as FeeSlice);
+              } else {
+                setSlice(k as FeeSlice | null);
+              }
+            }}
             formatValue={formatPKR}
+            hint={chartOnly ? 'Click a slice to open its detail.' : undefined}
           />
-          {slice && (
-            <div className="mt-4 border-t border-slate-100 pt-3">
+        </div>
+        )}
+
+        {/* Inline drill-down: full view only (the detail section filters the main table instead) */}
+        {!chartOnly && !detailMode && slice && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-bold text-slate-800">
                   {slice === 'collected' ? 'Collected' : 'Pending'} — {sliceRows.length} voucher(s)
@@ -255,13 +321,12 @@ export const FeeOverview: React.FC<{
                   </Table>
                 </div>
               )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Tabs + full table show only when no chart slice is open —
-            otherwise the same vouchers would appear twice (drill-down + table). */}
-        {!slice && (
+        {/* Tabs + full table: in the detail section the slice filters the table;
+            in the full view the table hides while the drill-down is open. */}
+        {(detailMode || !slice) && (
           <>
             <Tabs
               tabs={statusTabs.map((s) => ({
@@ -320,6 +385,7 @@ export const FeeOverview: React.FC<{
           </>
         )}
       </div>
-    </Card>
+      </Card>
+    </>
   );
 };

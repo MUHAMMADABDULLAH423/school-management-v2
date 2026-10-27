@@ -50,9 +50,9 @@ export const ExecutiveDashboard: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* KPI cards (left) + date filter (right, sticky) */}
-      <div className="grid gap-4 lg:grid-cols-3 items-start">
-        <div className="lg:col-span-2">
+      {/* KPI cards (left, wider) + date filter (right, narrower) */}
+      <div className="grid gap-3 lg:grid-cols-4 items-start">
+        <div className="lg:col-span-3">
           <OverviewKpiCards
             students={students}
             staff={staff}

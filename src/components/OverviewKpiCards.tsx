@@ -78,29 +78,29 @@ export const OverviewKpiCards: React.FC<{
         type="button"
         onClick={() => navigateTo(target)}
         title={label}
-        className="w-full text-left bg-white rounded-2xl border border-slate-200 shadow-sm p-5 cursor-pointer transition hover:shadow-md hover:border-indigo-300"
+        className="w-full text-left bg-gradient-to-b from-white to-slate-50 rounded-2xl border border-slate-200 shadow-sm p-6 cursor-pointer transition hover:shadow-md hover:border-indigo-300 hover:-translate-y-0.5"
       >
         {children}
       </button>
     ) : (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">{children}</div>
+      <div className="bg-gradient-to-b from-white to-slate-50 rounded-2xl border border-slate-200 shadow-sm p-6">{children}</div>
     );
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       {/* ---- Total students with attendance breakdown for the selected date ---- */}
       <KpiCard card="students" label="View students">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
               <GraduationCap className="w-5 h-5 text-emerald-600" />
             </div>
             <div className="text-[11px] font-bold tracking-wide text-slate-500">TOTAL STUDENTS</div>
           </div>
           <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">{attPill}</span>
         </div>
-        <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
+        <div className="text-4xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {activeStudents.length.toLocaleString()}
         </div>
         <div className="grid grid-cols-4 gap-2 mt-3">
@@ -127,14 +127,14 @@ export const OverviewKpiCards: React.FC<{
       <KpiCard card="staff" label="View teachers & staff">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
               <Users className="w-5 h-5 text-blue-600" />
             </div>
             <div className="text-[11px] font-bold tracking-wide text-slate-500">TEACHERS &amp; STAFF</div>
           </div>
           <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 shrink-0">Active</span>
         </div>
-        <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
+        <div className="text-4xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {activeStaff.length.toLocaleString()}
         </div>
         <div className="grid grid-cols-3 gap-2 mt-3">
@@ -159,17 +159,17 @@ export const OverviewKpiCards: React.FC<{
       <KpiCard card="fees" label="View fees">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
               <BadgeDollarSign className="w-5 h-5 text-teal-600" />
             </div>
             <div className="text-[11px] font-bold tracking-wide text-slate-500">FEE COLLECTION</div>
           </div>
           <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 shrink-0">{feePill}</span>
         </div>
-        <div className="text-3xl font-extrabold text-slate-900 mt-2 tabular-nums">
+        <div className="text-4xl font-extrabold text-slate-900 mt-2 tabular-nums">
           {formatPKR(feeCollected)}
         </div>
-        <div className="h-2 rounded-full bg-slate-100 mt-3 overflow-hidden">
+        <div className="h-2.5 rounded-full bg-slate-100 mt-3 overflow-hidden">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${feePct}%` }} />
         </div>
         <div className="flex items-center justify-between mt-2 text-[11px] font-semibold">

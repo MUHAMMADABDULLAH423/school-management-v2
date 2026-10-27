@@ -66,7 +66,7 @@ export const DateFilter: React.FC<{
     <Card>
       <CardHeader
         title="Date Filter"
-        subtitle="Every section below reacts to this filter"
+        subtitle={compact ? undefined : 'Every section below reacts to this filter'}
         action={
           <GhostButton onClick={() => onChange(defaultDateFilter())}>
             <RotateCcw className="w-4 h-4" />
@@ -74,7 +74,7 @@ export const DateFilter: React.FC<{
           </GhostButton>
         }
       />
-      <div className={compact ? 'px-4 py-3 space-y-3' : 'px-5 py-4 space-y-4'}>
+      <div className={compact ? 'px-3 py-2.5 space-y-2.5' : 'px-5 py-4 space-y-4'}>
         <div className="flex flex-wrap gap-2">
           {modes.map((m) => {
             const active = filter.mode === m.id;
@@ -84,7 +84,7 @@ export const DateFilter: React.FC<{
                 type="button"
                 onClick={() => set({ mode: m.id })}
                 className={`inline-flex items-center gap-1.5 rounded-lg font-semibold transition-colors ${
-                  compact ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm'
+                  compact ? 'px-2 py-1 text-[11px]' : 'px-3.5 py-2 text-sm'
                 } ${
                   active
                     ? 'bg-indigo-600 text-white shadow-sm'
@@ -141,7 +141,9 @@ export const DateFilter: React.FC<{
                   key={ym}
                   type="button"
                   onClick={() => toggleMonth(ym)}
-                  className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                  className={`rounded-full font-semibold border transition-colors ${
+                    compact ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm'
+                  } ${
                     active
                       ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
                       : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-700'

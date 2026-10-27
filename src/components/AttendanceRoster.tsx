@@ -4,6 +4,7 @@ import {
   AttendanceRecord, Student, DateFilterState, AttendanceStatus, dateInFilter,
 } from '../types';
 import { Card, CardHeader, Badge, EmptyState, Table, Avatar, SearchInput, Select } from './ui';
+import { DonutChart } from './DonutChart';
 
 const statusTone: Record<AttendanceStatus, 'green' | 'red' | 'amber' | 'blue' | 'slate'> = {
   Present: 'green',
@@ -37,6 +38,8 @@ export const AttendanceRoster: React.FC<{
   const [status, setStatus] = useState<StatusFilter>('All');
   const [cls, setCls] = useState('All');
   const [q, setQ] = useState('');
+  /** Donut slice selected for drill-down; null = chart only. */
+  const [slice, setSlice] = useState<'present' | 'absent' | 'late' | 'leave' | null>(null);
 
   const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
@@ -65,6 +68,21 @@ export const AttendanceRoster: React.FC<{
     return [...set].sort();
   }, [period]);
 
+  const leaveCount = useMemo(
+    () => period.filter((r) => r.status === 'Leave').length,
+    [period]
+  );
+
+  /** Records behind the selected donut slice (click a slice to drill down). */
+  const sliceRows = useMemo(() => {
+    if (!slice) return [];
+    if (slice === 'present') {
+      return period.filter((r) => r.status === 'Present' || r.status === 'HalfDay');
+    }
+    const want: AttendanceStatus = slice === 'absent' ? 'Absent' : slice === 'late' ? 'Late' : 'Leave';
+    return period.filter((r) => r.status === want);
+  }, [period, slice]);
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return period.filter((r) => {
@@ -87,6 +105,67 @@ export const AttendanceRoster: React.FC<{
         pill={filterLabel}
       />
       <div className="px-5 py-4">
+        {/* Donut chart: status mix, click a slice to see its records */}
+        <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-4">
+          <DonutChart
+            segments={[
+              { key: 'present', label: 'Present', value: counts.present, color: '#10b981' },
+              { key: 'absent', label: 'Absent', value: counts.absent, color: '#f43f5e' },
+              { key: 'late', label: 'Late', value: counts.late, color: '#f59e0b' },
+              { key: 'leave', label: 'Leave', value: leaveCount, color: '#64748b' },
+            ]}
+            centerLabel="records"
+            centerValue={String(counts.total)}
+            selectedKey={slice}
+            onSelect={(k) => setSlice(k as 'present' | 'absent' | 'late' | 'leave' | null)}
+          />
+          {slice && (
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-bold text-slate-800 capitalize">
+                  {slice} — {sliceRows.length} record(s)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSlice(null)}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-slate-100"
+                >
+                  Close ✕
+                </button>
+              </div>
+              {sliceRows.length === 0 ? (
+                <EmptyState title="No records" hint="Nothing in this slice for the selected period." />
+              ) : (
+                <div className="max-h-72 overflow-y-auto nice-scroll">
+                  <Table head={['Student', 'Class', 'Date', 'Status']}>
+                    {sliceRows.map((r) => {
+                      const s = r.studentId ? studentMap.get(r.studentId) : undefined;
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-50">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Avatar src={s?.photo} name={s?.name || 'Unknown'} size={32} />
+                              <div>
+                                <div className="font-semibold text-slate-800">{s?.name || 'Unknown'}</div>
+                                <div className="text-[11px] text-slate-400">{s?.rollNumber || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.classSection || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.date}</td>
+                          <td className="px-3 py-2">
+                            <Badge tone={statusTone[r.status]}>{r.status}</Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <CountChip
             label="Present"

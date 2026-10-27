@@ -5,7 +5,7 @@ import {
 import { useCollection } from '../hooks/useFirestore';
 import {
   Student, StaffMember, AttendanceRecord, FeeVoucher,
-  defaultDateFilter, todayStr,
+  defaultDateFilter, todayStr, filterMonths, filterAttendanceDate,
 } from '../types';
 import { Spinner, StatCard, Card, CardHeader } from './ui';
 import { DateFilter, filterLabelFor } from './DateFilter';
@@ -24,6 +24,10 @@ export const ExecutiveDashboard: React.FC = () => {
 
   const label = filterLabelFor(filter);
 
+  // Same filter mapping the admin overview uses: the KPI cards react to the
+  // date filter instead of always showing today / this month.
+  const attDate = filterAttendanceDate(filter);
+  const feeMonths = filterMonths(filter);
 
   const staffStrip = useMemo(() => {
     const today = todayStr();
@@ -47,6 +51,8 @@ export const ExecutiveDashboard: React.FC = () => {
             staff={staff}
             attendance={attendance}
             fees={fees}
+            attendanceDate={attDate}
+            feeMonths={feeMonths}
             cardTargets={{ staff: 'staff', fees: 'fees' }}
           />
         </div>

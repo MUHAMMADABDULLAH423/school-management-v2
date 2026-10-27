@@ -284,6 +284,33 @@ export function monthInFilter(month: string, f: DateFilterState): boolean {
   return inRange(month + '-01');
 }
 
+/** Unique YYYY-MM months between two YYYY-MM-DD dates (inclusive). */
+export function monthsBetween(start: string, end: string): string[] {
+  const out: string[] = [];
+  let [y, m] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
+/** Months covered by a filter — for monthly data like fee vouchers. */
+export function filterMonths(f: DateFilterState): string[] {
+  if (f.mode === 'months') return f.selectedMonths;
+  if (f.mode === 'single') return [f.singleDate.slice(0, 7)];
+  return monthsBetween(f.startDate, f.endDate);
+}
+
+/** Representative day for single-day breakdowns (attendance cards). */
+export function filterAttendanceDate(f: DateFilterState): string {
+  if (f.mode === 'single') return f.singleDate;
+  if (f.mode === 'range') return f.endDate;
+  return todayStr();
+}
+
 export const formatPKR = (n: number): string => `PKR ${Math.round(n).toLocaleString('en-PK')}`;
 
 export const gradeFor = (obtained: number, total: number): string => {

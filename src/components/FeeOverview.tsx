@@ -46,16 +46,32 @@ const MetricCard: React.FC<{
   </Card>
 );
 
+export type FeeSlice = 'collected' | 'pending';
+
+/** 'chart' = main overview (chart only) · 'window' = detail window (chart + list only) · 'full' = sidebar fee view (everything). */
+export type FeeOverviewMode = 'full' | 'chart' | 'window';
+
 export const FeeOverview: React.FC<{
   fees: FeeVoucher[];
   students: Student[];
   filter: DateFilterState;
   filterLabel: string;
   onOpenFees?: () => void;
-}> = ({ fees, students, filter, filterLabel, onOpenFees }) => {
+  mode?: FeeOverviewMode;
+  /** 'chart' mode: clicking a slice opens the detail window. */
+  onSliceClick?: (slice: FeeSlice) => void;
+  /** 'window' mode: slice is controlled by the parent (null closes the window). */
+  windowSlice?: FeeSlice | null;
+  onWindowSliceChange?: (slice: FeeSlice | null) => void;
+}> = ({ fees, students, filter, filterLabel, onOpenFees, mode = 'full', onSliceClick, windowSlice, onWindowSliceChange }) => {
   const [tab, setTab] = useState<'All' | FeeStatus>('All');
+  const [innerSlice, setInnerSlice] = useState<FeeSlice | null>(null);
   /** Donut slice selected for drill-down; null = chart only. */
-  const [slice, setSlice] = useState<'collected' | 'pending' | null>(null);
+  const slice = mode === 'window' ? windowSlice ?? null : innerSlice;
+  const setSlice = (s: FeeSlice | null) => {
+    if (mode === 'window') onWindowSliceChange?.(s);
+    else setInnerSlice(s);
+  };
   /** Class-wise filter + search, like the attendance roster. */
   const [cls, setCls] = useState('All');
   const [q, setQ] = useState('');
@@ -118,10 +134,16 @@ export const FeeOverview: React.FC<{
     return counts;
   }, [filtered]);
 
-  const rows = useMemo(
-    () => filtered.filter((f) => tab === 'All' || f.status === tab),
-    [filtered, tab]
-  );
+  const rows = useMemo(() => {
+    let list = filtered.filter((f) => tab === 'All' || f.status === tab);
+    // In the detail window the slice filters the list (no tabs there).
+    if (mode === 'window' && slice) {
+      list = list.filter((f) =>
+        slice === 'collected' ? (f.paidAmount || 0) > 0 : (f.dueAmount || 0) > 0
+      );
+    }
+    return list;
+  }, [filtered, tab, mode, slice]);
 
   /** Vouchers behind the selected donut slice (click a slice to drill down). */
   const sliceRows = useMemo(() => {
@@ -152,7 +174,9 @@ export const FeeOverview: React.FC<{
       />
 
       <div className="px-5 py-4">
-        {/* Class + search filters first (like the attendance roster) — they drive the cards, chart and table below */}
+        {/* Class + search filters + summary cards: full view only (never in chart/window modes) */}
+        {mode === 'full' && (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           <SearchInput value={q} onChange={setQ} placeholder="Search voucher, student, roll…" />
           <Select value={cls} onChange={(e) => setCls(e.target.value)}>
@@ -202,9 +226,12 @@ export const FeeOverview: React.FC<{
             tone="indigo"
           />
         </div>
+        </>
+        )}
 
-        {/* Donut chart: collected vs pending, click a slice to see its vouchers */}
-        <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-5">
+        {/* Donut chart: every mode. Chart mode navigates to the window; window mode
+            toggles (re-click closes); full mode drills down inline. */}
+        <div className={`rounded-2xl border border-slate-200 px-5 py-4 ${mode === 'chart' ? '' : 'mb-5'}`}>
           <DonutChart
             segments={[
               { key: 'collected', label: 'Collected', value: totals.collected, color: '#10b981' },
@@ -212,11 +239,24 @@ export const FeeOverview: React.FC<{
             ]}
             centerLabel="billed"
             centerValue={formatPKR(totals.billed)}
-            selectedKey={slice}
-            onSelect={(k) => setSlice(k as 'collected' | 'pending' | null)}
+            selectedKey={mode === 'chart' ? null : slice}
+            onSelect={(k) => {
+              if (mode === 'chart') {
+                if (k) onSliceClick?.(k as FeeSlice);
+              } else {
+                setSlice(k as FeeSlice | null);
+              }
+            }}
             formatValue={formatPKR}
+            hint={
+              mode === 'chart'
+                ? 'Click a slice to open its detail.'
+                : mode === 'window'
+                ? 'Click a slice to switch — click the selected slice again to go back.'
+                : undefined
+            }
           />
-          {slice && (
+          {mode === 'full' && slice && (
             <div className="mt-4 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-bold text-slate-800">
@@ -259,10 +299,11 @@ export const FeeOverview: React.FC<{
           )}
         </div>
 
-        {/* Tabs + full table show only when no chart slice is open —
-            otherwise the same vouchers would appear twice (drill-down + table). */}
-        {!slice && (
+        {/* Full view: tabs + table hide while the inline drill-down is open.
+            Window mode: the slice filters this same table (no tabs). */}
+        {(mode === 'window' || !slice) && (
           <>
+            {mode === 'full' && (
             <Tabs
               tabs={statusTabs.map((s) => ({
                 id: s,
@@ -271,6 +312,7 @@ export const FeeOverview: React.FC<{
               active={tab}
               onChange={(id) => setTab(id as 'All' | FeeStatus)}
             />
+            )}
 
             {rows.length === 0 ? (
               <EmptyState title="No fee vouchers" hint="No vouchers match the selected period and status." />

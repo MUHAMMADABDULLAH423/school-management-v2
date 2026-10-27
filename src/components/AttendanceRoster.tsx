@@ -29,17 +29,33 @@ const CountChip: React.FC<{
   </div>
 );
 
+export type AttendanceSlice = 'present' | 'absent' | 'late' | 'leave';
+
+/** 'chart' = main overview (chart only) · 'window' = detail window (chart + list only) · 'full' = everything. */
+export type AttendanceRosterMode = 'full' | 'chart' | 'window';
+
 export const AttendanceRoster: React.FC<{
   records: AttendanceRecord[];
   students: Student[];
   filter: DateFilterState;
   filterLabel: string;
-}> = ({ records, students, filter, filterLabel }) => {
+  mode?: AttendanceRosterMode;
+  /** 'chart' mode: clicking a slice opens the detail window. */
+  onSliceClick?: (slice: AttendanceSlice) => void;
+  /** 'window' mode: slice is controlled by the parent (null closes the window). */
+  windowSlice?: AttendanceSlice | null;
+  onWindowSliceChange?: (slice: AttendanceSlice | null) => void;
+}> = ({ records, students, filter, filterLabel, mode = 'full', onSliceClick, windowSlice, onWindowSliceChange }) => {
   const [status, setStatus] = useState<StatusFilter>('All');
   const [cls, setCls] = useState('All');
   const [q, setQ] = useState('');
+  const [innerSlice, setInnerSlice] = useState<AttendanceSlice | null>(null);
   /** Donut slice selected for drill-down; null = chart only. */
-  const [slice, setSlice] = useState<'present' | 'absent' | 'late' | 'leave' | null>(null);
+  const slice = mode === 'window' ? windowSlice ?? null : innerSlice;
+  const setSlice = (s: AttendanceSlice | null) => {
+    if (mode === 'window') onWindowSliceChange?.(s);
+    else setInnerSlice(s);
+  };
 
   const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
@@ -85,7 +101,7 @@ export const AttendanceRoster: React.FC<{
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return period.filter((r) => {
+    let list = period.filter((r) => {
       if (status !== 'All' && r.status !== status) return false;
       if (cls !== 'All' && r.classSection !== cls) return false;
       if (needle) {
@@ -95,7 +111,20 @@ export const AttendanceRoster: React.FC<{
       }
       return true;
     });
-  }, [period, status, cls, q, studentMap]);
+    // In the detail window the slice filters the list (no status/class/search there).
+    if (mode === 'window' && slice) {
+      list = list.filter((r) =>
+        slice === 'present'
+          ? r.status === 'Present' || r.status === 'HalfDay'
+          : slice === 'absent'
+          ? r.status === 'Absent'
+          : slice === 'late'
+          ? r.status === 'Late'
+          : r.status === 'Leave'
+      );
+    }
+    return list;
+  }, [period, status, cls, q, studentMap, mode, slice]);
 
   return (
     <Card>
@@ -105,8 +134,9 @@ export const AttendanceRoster: React.FC<{
         pill={filterLabel}
       />
       <div className="px-5 py-4">
-        {/* Donut chart: status mix, click a slice to see its records */}
-        <div className="rounded-2xl border border-slate-200 px-5 py-4 mb-4">
+        {/* Donut chart: every mode. Chart mode navigates to the window; window mode
+            toggles (re-click closes); full mode drills down inline. */}
+        <div className={`rounded-2xl border border-slate-200 px-5 py-4 ${mode === 'chart' ? '' : 'mb-4'}`}>
           <DonutChart
             segments={[
               { key: 'present', label: 'Present', value: counts.present, color: '#10b981' },
@@ -116,10 +146,23 @@ export const AttendanceRoster: React.FC<{
             ]}
             centerLabel="records"
             centerValue={String(counts.total)}
-            selectedKey={slice}
-            onSelect={(k) => setSlice(k as 'present' | 'absent' | 'late' | 'leave' | null)}
+            selectedKey={mode === 'chart' ? null : slice}
+            onSelect={(k) => {
+              if (mode === 'chart') {
+                if (k) onSliceClick?.(k as AttendanceSlice);
+              } else {
+                setSlice(k as AttendanceSlice | null);
+              }
+            }}
+            hint={
+              mode === 'chart'
+                ? 'Click a slice to open its detail.'
+                : mode === 'window'
+                ? 'Click a slice to switch — click the selected slice again to go back.'
+                : undefined
+            }
           />
-          {slice && (
+          {mode === 'full' && slice && (
             <div className="mt-4 border-t border-slate-100 pt-3">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-bold text-slate-800 capitalize">
@@ -166,6 +209,8 @@ export const AttendanceRoster: React.FC<{
           )}
         </div>
 
+        {/* Summary chips: full view only — the chart/window modes show just the chart (+ list) */}
+        {mode === 'full' && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <CountChip
             label="Present"
@@ -192,11 +237,13 @@ export const AttendanceRoster: React.FC<{
             </span>
           </span>
         </div>
+        )}
 
-        {/* Filters + full list show only when no chart slice is open —
-            otherwise the same records would appear twice (drill-down + list). */}
-        {!slice && (
+        {/* Full view: filters + list hide while the inline drill-down is open.
+            Window mode: the slice filters this same list (no filters). */}
+        {(mode === 'window' || !slice) && (
           <>
+            {mode === 'full' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <SearchInput value={q} onChange={setQ} placeholder="Search name or roll no…" />
               <Select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
@@ -214,6 +261,7 @@ export const AttendanceRoster: React.FC<{
                 ))}
               </Select>
             </div>
+            )}
 
             {rows.length === 0 ? (
               <EmptyState

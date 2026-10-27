@@ -14,6 +14,9 @@ import {
 
 const STATUSES: AttendanceStatus[] = ['Present', 'Absent', 'Late', 'HalfDay', 'Leave'];
 
+/** Dropdown value for the admin-only "show every class" option. */
+const ALL_VALUE = '__all__';
+
 const statusTone = (s: AttendanceStatus): 'green' | 'red' | 'amber' | 'blue' | 'violet' =>
   s === 'Present' ? 'green' : s === 'Absent' ? 'red' : s === 'Late' ? 'amber'
     : s === 'HalfDay' ? 'blue' : 'violet';
@@ -45,35 +48,45 @@ export const AttendanceManager: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
 
-  // Class options: prefer classes collection, fallback to students' class/section combos
+  // Class options: prefer classes collection, fallback to students' class/section combos.
+  // Admins also get an "All Classes" option first (teachers stay per-class, so one
+  // teacher can't overwrite another class's marks — the record id is per student+date).
+  const canViewAll = currentUser?.role === 'admin';
   const options = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
     if (classes.length > 0) {
-      return classes.map((c) => ({ value: clsLabel(c.name, c.section), label: clsLabel(c.name, c.section) }));
+      list.push(...classes.map((c) => ({ value: clsLabel(c.name, c.section), label: clsLabel(c.name, c.section) })));
+    } else {
+      const seen = new Map<string, string>();
+      students.filter((s) => s.isActive).forEach((s) => {
+        const v = clsLabel(s.class, s.section);
+        if (!seen.has(v)) seen.set(v, v);
+      });
+      list.push(...[...seen.keys()].map((v) => ({ value: v, label: v })));
     }
-    const seen = new Map<string, string>();
-    students.filter((s) => s.isActive).forEach((s) => {
-      const v = clsLabel(s.class, s.section);
-      if (!seen.has(v)) seen.set(v, v);
-    });
-    return [...seen.keys()].map((v) => ({ value: v, label: v }));
-  }, [classes, students]);
+    return canViewAll ? [{ value: ALL_VALUE, label: 'All Classes' }, ...list] : list;
+  }, [classes, students, canViewAll]);
 
   const sel = classSection || options[0]?.value || '';
+  const isAll = sel === ALL_VALUE;
 
   const classStudents = useMemo(() => {
     if (!sel) return [];
     return students
-      .filter((s) => s.isActive && clsLabel(s.class, s.section) === sel)
-      .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
-  }, [students, sel]);
+      .filter((s) => s.isActive && (isAll || clsLabel(s.class, s.section) === sel))
+      .sort((a, b) => {
+        const byClass = clsLabel(a.class, a.section).localeCompare(clsLabel(b.class, b.section));
+        return byClass !== 0 ? byClass : a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true });
+      });
+  }, [students, sel, isAll]);
 
   const existingForDate = useMemo(() => {
     const map: Record<string, AttendanceRecord> = {};
     records
-      .filter((r) => r.type === 'student' && r.date === date && r.classSection === sel)
+      .filter((r) => r.type === 'student' && r.date === date && (isAll || r.classSection === sel))
       .forEach((r) => { if (r.studentId) map[r.studentId] = r; });
     return map;
-  }, [records, date, sel]);
+  }, [records, date, sel, isAll]);
 
   const markOf = (id: string): AttendanceStatus =>
     marks[id] ?? existingForDate[id]?.status ?? 'Present';
@@ -95,12 +108,15 @@ export const AttendanceManager: React.FC = () => {
         counts[status] = (counts[status] || 0) + 1;
         await setDoc(doc(db, 'attendance', `${date}_${st.id}`), {
           type: 'student', studentId: st.id, status, date,
-          markedBy: currentUser.name, classSection: sel,
+          markedBy: currentUser.name,
+          // "All" view: keep each student's own class on the record — never "__all__",
+          // or per-class views and overview counts would break.
+          classSection: isAll ? clsLabel(st.class, st.section) : sel,
         }, { merge: true });
       }
       const summary = STATUSES.map((s) => (counts[s] ? `${counts[s]} ${s}` : '')).filter(Boolean).join(', ');
       await logAudit(currentUser.uid, currentUser.name, 'Marked student attendance',
-        `${sel} on ${date} — ${summary || 'no marks'}`);
+        `${isAll ? 'All Classes' : sel} on ${date} — ${summary || 'no marks'}`);
       setMarks({});
       setSavedMsg(`Saved attendance for ${classStudents.length} students on ${date}.`);
     } catch (e: any) {
@@ -146,7 +162,10 @@ export const AttendanceManager: React.FC = () => {
         )}
 
         {classStudents.length === 0 ? (
-          <EmptyState title="No students in this class" hint="Admissions add students via the Admin panel." />
+          <EmptyState
+            title={isAll ? 'No students enrolled' : 'No students in this class'}
+            hint="Admissions add students via the Admin panel."
+          />
         ) : (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
@@ -163,7 +182,10 @@ export const AttendanceManager: React.FC = () => {
                     <Avatar src={st.photo} name={st.name} size={34} />
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-slate-900 truncate">{st.name}</div>
-                      <div className="text-[11px] text-slate-500">Roll {st.rollNumber}</div>
+                      <div className="text-[11px] text-slate-500">
+                        Roll {st.rollNumber}
+                        {isAll && ` • ${clsLabel(st.class, st.section)}`}
+                      </div>
                     </div>
                     <Badge tone={statusTone(m)}>{m}</Badge>
                   </div>

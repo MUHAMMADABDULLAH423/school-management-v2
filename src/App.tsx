@@ -35,9 +35,9 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'classes', label: 'Classes', icon: <Layers className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
+    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
     { id: 'audit', label: 'Audit Log', icon: <ScrollText className={iconCls} /> },
     { id: 'users', label: 'Users', icon: <UserCog className={iconCls} /> },
-    { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
   ],
   admin: [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className={iconCls} /> },

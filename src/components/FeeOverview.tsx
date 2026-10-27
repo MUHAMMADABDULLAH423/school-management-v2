@@ -300,8 +300,9 @@ export const FeeOverview: React.FC<{
         </div>
 
         {/* Full view: tabs + table hide while the inline drill-down is open.
-            Window mode: the slice filters this same table (no tabs). */}
-        {(mode === 'window' || !slice) && (
+            Window mode: the slice filters this same table (no tabs).
+            Chart mode: never show the table — list appears only in the window. */}
+        {(mode === 'window' || (mode === 'full' && !slice)) && (
           <>
             {mode === 'full' && (
             <Tabs

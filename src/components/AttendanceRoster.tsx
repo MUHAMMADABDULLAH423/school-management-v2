@@ -240,8 +240,9 @@ export const AttendanceRoster: React.FC<{
         )}
 
         {/* Full view: filters + list hide while the inline drill-down is open.
-            Window mode: the slice filters this same list (no filters). */}
-        {(mode === 'window' || !slice) && (
+            Window mode: the slice filters this same list (no filters).
+            Chart mode: never show the list — it appears only in the window. */}
+        {(mode === 'window' || (mode === 'full' && !slice)) && (
           <>
             {mode === 'full' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">

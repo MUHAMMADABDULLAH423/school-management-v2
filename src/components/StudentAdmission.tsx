@@ -15,18 +15,20 @@ import React, { useMemo, useState } from 'react';
 import {
   addDoc, collection, doc, updateDoc,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
 import { ensureParentAccount, ParentAccountResult } from '../services/parentAccount';
 import { waNumber } from './FeeVoucherPrint';
-import { Student, ClassSection, FeeStatus } from '../types';
+import { Student, ClassSection, FeeStatus, todayStr } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, Select, PrimaryButton, GhostButton,
   Badge, Avatar, SearchInput, Table, EmptyState, Spinner, useConfirm,
 } from './ui';
 import { ImageUploadField } from './ImageUploadField';
+import StudentIdCard from './StudentIdCard';
+import StudentRecordsPrint from './StudentRecordsPrint';
 
 const FEE_STATUSES: FeeStatus[] = ['Paid', 'Partial', 'Pending', 'Defaulter'];
 
@@ -83,6 +85,11 @@ const StudentAdmission: React.FC = () => {
   /** Result of the parent-login auto-create for the last save (shown as a banner). */
   const [parentResult, setParentResult] = useState<ParentAccountResult | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Student whose ID card is open for printing. */
+  const [idCardFor, setIdCardFor] = useState<Student | null>(null);
+  /** Data Extractor: export menu + printable records view. */
+  const [exportOpen, setExportOpen] = useState(false);
+  const [printRecords, setPrintRecords] = useState(false);
 
   const set = (k: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -304,6 +311,29 @@ const StudentAdmission: React.FC = () => {
         )}`
       : '';
 
+  /** Data Extractor (CSV): downloads the currently filtered list, Excel-ready. */
+  const downloadCSV = () => {
+    const head = ['Name', 'Roll No', 'Admission No', 'Class', 'Section', 'Date of Birth', 'Gender', 'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Address', 'Fee Status', 'Active', 'Academic Year'];
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [head.map(esc).join(',')];
+    filtered.forEach((s) => {
+      lines.push([
+        s.name, s.rollNumber, s.admissionNo, s.class, s.section, s.dob, s.gender,
+        s.parentName, s.parentPhone, s.parentWhatsApp, s.parentEmail, s.address,
+        s.feeStatus, s.isActive ? 'Yes' : 'No', s.academicYear,
+      ].map(esc).join(','));
+    });
+    // BOM so Excel reads UTF-8 correctly.
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `students-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
+
   return (
     <div>
       <Card>
@@ -311,9 +341,39 @@ const StudentAdmission: React.FC = () => {
           title="Students"
           subtitle={`${filtered.length} of ${students.length} students`}
           action={
-            <PrimaryButton onClick={openAdd}>
-              <UserPlus className="w-4 h-4" /> Admit Student
-            </PrimaryButton>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <GhostButton onClick={() => setExportOpen((v) => !v)} title="Download the filtered list">
+                  <Download className="w-4 h-4" /> Export
+                </GhostButton>
+                {exportOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                    <div className="absolute right-0 mt-1 w-60 rounded-xl border border-slate-200 bg-white shadow-lg z-20 py-1">
+                      <button
+                        type="button"
+                        onClick={downloadCSV}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 text-left"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        Excel (CSV) — filtered list
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setExportOpen(false); setPrintRecords(true); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 text-left"
+                      >
+                        <FileText className="w-4 h-4 text-rose-600" />
+                        PDF — filtered list
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <PrimaryButton onClick={openAdd}>
+                <UserPlus className="w-4 h-4" /> Admit Student
+              </PrimaryButton>
+            </div>
           }
         />
         <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row gap-3">
@@ -450,6 +510,14 @@ const StudentAdmission: React.FC = () => {
                   </button>
                 </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => setIdCardFor(s)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                    title="Print ID card"
+                  >
+                    <IdCard className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setViewing(s)}
@@ -611,6 +679,17 @@ const StudentAdmission: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+      {idCardFor && (
+        <StudentIdCard student={idCardFor} school={school} onClose={() => setIdCardFor(null)} />
+      )}
+      {printRecords && (
+        <StudentRecordsPrint
+          students={filtered}
+          school={school}
+          subtitle={`${filtered.length} of ${students.length} students${classFilter !== 'all' ? ` · ${classFilter}` : ''}`}
+          onClose={() => setPrintRecords(false)}
+        />
       )}
       {dialog}
     </div>

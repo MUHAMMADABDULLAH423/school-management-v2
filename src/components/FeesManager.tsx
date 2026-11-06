@@ -10,7 +10,7 @@ import {
   addDoc, collection, doc, updateDoc, writeBatch,
 } from 'firebase/firestore';
 import {
-  Receipt, Plus, Eye, Wallet, Banknote, AlertCircle, CircleDollarSign, MessageCircle,
+  Receipt, Plus, Eye, Wallet, Banknote, AlertCircle, CircleDollarSign, MessageCircle, Users,
 } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -21,6 +21,7 @@ import {
   Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
 } from './ui';
 import FeeVoucherPrint, { buildWaLink } from './FeeVoucherPrint';
+import FamilyVoucherPrint, { FamilyEntry } from './FamilyVoucherPrint';
 
 const statusTone = (s: FeeStatus): 'green' | 'amber' | 'blue' | 'red' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'amber' : s === 'Pending' ? 'blue' : 'red';
@@ -59,6 +60,13 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   const [printFor, setPrintFor] = useState<FeeVoucher | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Family voucher: picker modal + printable combined challan. */
+  const [familyOpen, setFamilyOpen] = useState(false);
+  const [familyEmail, setFamilyEmail] = useState('');
+  const [familyMonth, setFamilyMonth] = useState(monthStr());
+  const [familyPrint, setFamilyPrint] = useState<{
+    entries: FamilyEntry[]; missing: Student[]; parentName: string; parentEmail: string; month: string;
+  } | null>(null);
 
   // Generate-voucher form state
   const [genMonth, setGenMonth] = useState(monthStr());
@@ -233,6 +241,38 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   const cardBtn = (active: boolean) =>
     `text-left w-full rounded-2xl cursor-pointer transition hover:shadow-md ${active ? 'ring-2 ring-offset-1 ring-indigo-500' : ''}`;
 
+  /** Families = active students grouped by parent email, with 2+ children. */
+  const families = useMemo(() => {
+    const groups = new Map<string, { email: string; parentName: string; children: Student[] }>();
+    students.forEach((s) => {
+      if (!s.isActive) return;
+      const email = (s.parentEmail || '').trim().toLowerCase();
+      if (!email) return;
+      const g = groups.get(email) || { email, parentName: s.parentName || '', children: [] };
+      g.children.push(s);
+      if (!g.parentName && s.parentName) g.parentName = s.parentName;
+      groups.set(email, g);
+    });
+    return [...groups.values()]
+      .filter((g) => g.children.length >= 2)
+      .sort((a, b) => (a.parentName || a.email).localeCompare(b.parentName || b.email));
+  }, [students]);
+
+  /** Selected family's vouchers for the picked month + children missing one. */
+  const familyPreview = useMemo(() => {
+    if (!familyEmail) return { entries: [] as FamilyEntry[], missing: [] as Student[] };
+    const fam = families.find((f) => f.email === familyEmail);
+    if (!fam) return { entries: [] as FamilyEntry[], missing: [] as Student[] };
+    const entries: FamilyEntry[] = [];
+    const missing: Student[] = [];
+    fam.children.forEach((st) => {
+      const v = fees.find((f) => f.studentId === st.id && f.month === familyMonth);
+      if (v) entries.push({ student: st, voucher: v });
+      else missing.push(st);
+    });
+    return { entries, missing };
+  }, [families, familyEmail, familyMonth, fees]);
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -285,6 +325,14 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                 onChange={(e) => setMonthFilter(e.target.value)}
                 className="w-auto disabled:opacity-40"
               />
+              <button
+                type="button"
+                onClick={() => { setFamilyMonth(monthFilter); setFamilyEmail(families[0]?.email || ''); setFamilyOpen(true); }}
+                title="One combined voucher for siblings (same parent email)"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border bg-white text-slate-600 border-slate-200 hover:border-indigo-300"
+              >
+                <Users className="w-4 h-4" /> Family Voucher
+              </button>
               {!readOnly && (
                 <PrimaryButton onClick={() => { setGenMonth(monthFilter); setDueDate(`${monthFilter}-10`); setError(''); setGenerateOpen(true); }}>
                   <Plus className="w-4 h-4" /> Generate Vouchers
@@ -454,6 +502,89 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
           student={printStudent}
           school={school}
           onClose={() => setPrintFor(null)}
+        />
+      )}
+
+      {/* Family voucher picker modal */}
+      {familyOpen && (
+        <Modal
+          title="Family Fee Voucher"
+          subtitle="One combined challan for siblings — same parent email"
+          onClose={() => setFamilyOpen(false)}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Family">
+              <Select value={familyEmail} onChange={(e) => setFamilyEmail(e.target.value)}>
+                {families.length === 0 && <option value="">— No families with 2+ children —</option>}
+                {families.map((f) => (
+                  <option key={f.email} value={f.email}>
+                    {f.parentName || f.email} — {f.children.length} children
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Month">
+              <TextInput type="month" value={familyMonth} onChange={(e) => setFamilyMonth(e.target.value)} />
+            </Field>
+          </div>
+          {familyEmail && (
+            <div className="mt-4 space-y-1.5">
+              {familyPreview.entries.map(({ student, voucher }) => (
+                <div key={voucher.id} className="flex flex-wrap justify-between gap-2 text-sm text-slate-700">
+                  <span className="font-semibold">{student.name} <span className="font-normal text-slate-500">({student.rollNumber} · {student.class}-{student.section})</span></span>
+                  <span>Total {formatPKR(voucher.totalAmount)} · Due <b className="text-rose-700">{formatPKR(voucher.dueAmount)}</b></span>
+                </div>
+              ))}
+              {familyPreview.missing.map((s) => (
+                <div key={s.id} className="text-sm text-slate-400">
+                  No voucher for {s.name} in {familyMonth}
+                </div>
+              ))}
+              {familyPreview.entries.length > 0 && (
+                <div className="pt-2 mt-1 border-t border-slate-200 text-sm font-bold text-slate-900 flex justify-between">
+                  <span>Family due</span>
+                  <span className="text-rose-700">
+                    {formatPKR(familyPreview.entries.reduce((t, e) => t + (e.voucher.dueAmount || 0), 0))}
+                  </span>
+                </div>
+              )}
+              {familyPreview.entries.length === 0 && (
+                <p className="text-sm text-slate-500">No vouchers for this family in {familyMonth}.</p>
+              )}
+            </div>
+          )}
+          <div className="mt-5 flex justify-end gap-2">
+            <GhostButton onClick={() => setFamilyOpen(false)}>Cancel</GhostButton>
+            <PrimaryButton
+              disabled={familyPreview.entries.length === 0}
+              onClick={() => {
+                const fam = families.find((f) => f.email === familyEmail);
+                setFamilyPrint({
+                  entries: familyPreview.entries,
+                  missing: familyPreview.missing,
+                  parentName: fam?.parentName || '',
+                  parentEmail: familyEmail,
+                  month: familyMonth,
+                });
+                setFamilyOpen(false);
+              }}
+            >
+              <Eye className="w-4 h-4" /> View / Print
+            </PrimaryButton>
+          </div>
+        </Modal>
+      )}
+
+      {/* Family voucher print overlay */}
+      {familyPrint && (
+        <FamilyVoucherPrint
+          entries={familyPrint.entries}
+          missing={familyPrint.missing}
+          parentName={familyPrint.parentName}
+          parentEmail={familyPrint.parentEmail}
+          month={familyPrint.month}
+          school={school}
+          onClose={() => setFamilyPrint(null)}
         />
       )}
     </div>

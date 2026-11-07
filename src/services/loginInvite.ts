@@ -190,34 +190,42 @@ export async function resendLoginInvite(opts: {
 
   const sendInvite = () => sendPasswordResetEmail(secondaryAuth, email);
 
+  // BUG FIX (2026-11-07): the Auth login MUST be created first. Never probe
+  // with the reset email: with email-enumeration protection on (Firebase
+  // default for new projects), a reset for a missing account answers
+  // "success" and sends nothing — the old code then reported 'invited'
+  // while no login existed and no email was sent. Create first, so the
+  // invite always has a real recipient.
   try {
+    const secret = generateSecret();
+    let authExisted = false;
+    try {
+      await createUserWithEmailAndPassword(secondaryAuth, email, secret);
+    } catch (e: any) {
+      if (String(e?.code || '').includes('email-already-in-use')) {
+        authExisted = true;
+      } else {
+        throw e;
+      }
+    } finally {
+      await signOut(secondaryAuth).catch(() => {});
+    }
+
     try {
       await sendInvite();
-    } catch (e: any) {
-      if (!String(e?.code || '').includes('user-not-found')) throw e;
-      // No Auth login yet (staff added before the invite feature) — create
-      // it, then send the invite.
-      const secret = generateSecret();
-      try {
-        await createUserWithEmailAndPassword(secondaryAuth, email, secret);
-      } catch (e2: any) {
-        if (String(e2?.code || '').includes('email-already-in-use')) {
-          // It appeared between the two calls — just send the invite.
-          await sendInvite();
-          await ensureProfile(false);
-          return { status: 'invited', email, name, phone };
-        }
-        throw e2;
-      } finally {
-        await signOut(secondaryAuth).catch(() => {});
+    } catch {
+      // Email could not be sent. A one-time password only works when WE
+      // just created the account (the secret is its password); for a
+      // pre-existing account the password is unknown, so be honest instead.
+      if (authExisted) {
+        return {
+          status: 'failed',
+          email,
+          error: 'Invite email nahi bheji ja saki. Login page par "Forgot password" use karein, ya Firebase Console se password reset karein.',
+        };
       }
-      try {
-        await sendInvite();
-      } catch {
-        // Email still can't be sent — fall back to the one-time password.
-        await ensureProfile(true);
-        return { status: 'created', email, name, phone, tempPassword: secret };
-      }
+      await ensureProfile(true);
+      return { status: 'created', email, name, phone, tempPassword: secret };
     }
     await ensureProfile(false);
     return { status: 'invited', email, name, phone };

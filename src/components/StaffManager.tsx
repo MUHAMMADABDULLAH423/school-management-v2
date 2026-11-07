@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
-import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, MessageCircle } from 'lucide-react';
+import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, MessageCircle, Mail } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -10,7 +10,7 @@ import {
   PrimaryButton, SearchInput, Select, Spinner, Table, TextInput, useConfirm,
 } from './ui';
 import { ImageUploadField } from './ImageUploadField';
-import { ensureLoginAccount, LoginInviteResult } from '../services/loginInvite';
+import { ensureLoginAccount, resendLoginInvite, LoginInviteResult } from '../services/loginInvite';
 import { waNumber } from './FeeVoucherPrint';
 
 interface StaffManagerProps {
@@ -62,6 +62,8 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   /** Result of the login invite for the last add (shown as a banner). */
   const [loginResult, setLoginResult] = useState<LoginInviteResult | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Email of the row whose invite is being (re)sent — disables its button. */
+  const [invitingEmail, setInvitingEmail] = useState('');
 
   const logAudit = async (action: string, details: string) => {
     if (!currentUser) return;
@@ -322,6 +324,38 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const setField = <K extends keyof StaffForm>(k: K, v: StaffForm[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  /** (Re)send the set-password invite to a staff member already on the list
+   * (added before the invite feature, or an invite that never arrived). */
+  const sendInvite = (m: StaffMember) => {
+    ask({
+      title: 'Send login invite',
+      message: `Send a set-password invite email to ${m.name} (${m.email})? They will choose their own password from the link.`,
+      confirmLabel: 'Send invite',
+      onConfirm: async () => {
+        setInvitingEmail(m.email);
+        try {
+          const lr = await resendLoginInvite({
+            email: m.email,
+            name: m.name,
+            role: m.role,
+            phone: m.phone || '',
+            schoolId: currentUser?.schoolId || 'main',
+            staffId: m.id,
+            photoURL: m.photo || undefined,
+          });
+          setLoginResult(lr);
+          if (lr.status === 'invited') {
+            await logAudit('Login invite sent', `Invite email sent to ${m.name} (${m.role}) — ${m.email}`);
+          } else if (lr.status === 'created') {
+            await logAudit('Staff login created', `Login created for ${m.name} (${m.role}) — ${m.email}; invite email failed, temporary password shown once to admin`);
+          }
+        } finally {
+          setInvitingEmail('');
+        }
+      },
+    });
+  };
+
   const copyTempPassword = async () => {
     if (loginResult?.status !== 'created') return;
     try {
@@ -475,8 +509,8 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
         {loginResult?.status === 'failed' && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-2">
             <p className="text-sm text-amber-900">
-              Staff member save ho gaya, lekin login nahi ban saka: {loginResult.error}{' '}
-              Dobara save karke koshish karein, ya Firebase Console se bana lein.
+              Login invite nahi bheja ja saka: {loginResult.error}{' '}
+              Dobara koshish karein, ya Firebase Console se bana lein.
             </p>
             <button
               type="button"
@@ -549,6 +583,15 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                   </button>
                   <button
                     type="button"
+                    onClick={() => sendInvite(m)}
+                    disabled={invitingEmail === m.email}
+                    title="Send login invite email"
+                    className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 mr-1 disabled:opacity-50"
+                  >
+                    <Mail className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => toggleActive(m)}
                     title={m.isActive ? 'Deactivate' : 'Activate'}
                     className={`inline-flex p-1.5 rounded-lg ${
@@ -572,7 +615,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
           subtitle={
             isEdit
               ? 'Update profile details. Email cannot be changed — it is the login identity.'
-              : 'A staff record and login user will be created. The Firebase Auth login for this email must be created in Firebase Console → Authentication.'
+              : 'A staff record and login will be created, and a set-password invite email will be sent to this email. If the email cannot be sent, a one-time temporary password will be shown instead.'
           }
           onClose={() => setModalOpen(false)}
           wide

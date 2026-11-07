@@ -139,3 +139,89 @@ export async function ensureLoginAccount(opts: {
     return { status: 'failed', email, error: friendlyError(e) };
   }
 }
+
+/**
+ * (Re)send the invite for someone who is already in the system — staff added
+ * before the invite feature, an invite that never arrived, or a lost email.
+ * Unlike ensureLoginAccount it does NOT stop at an existing profile: it
+ * sends the set-password email either way, creating the Auth login first
+ * when there is none yet. The profile is created if missing; an already
+ * adopted profile keeps its real uid and only gets isFirstLogin updated.
+ */
+export async function resendLoginInvite(opts: {
+  email: string;
+  name: string;
+  role: 'parent' | 'teacher' | 'staff';
+  phone: string;
+  schoolId: string;
+  staffId?: string;
+  photoURL?: string;
+}): Promise<LoginInviteResult> {
+  const email = opts.email.trim().toLowerCase();
+  const name = opts.name.trim();
+  const phone = opts.phone.trim();
+  if (!email) return { status: 'failed', email, error: 'No email given.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { status: 'failed', email, error: 'That email address looks invalid.' };
+  }
+
+  const ensureProfile = async (isFirstLogin: boolean) => {
+    const ref = doc(db, 'users', pendingUserDocId(email));
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      // Never overwrite an adopted uid — only the first-login flag changes.
+      await setDoc(ref, { isFirstLogin }, { merge: true });
+    } else {
+      await setDoc(ref, {
+        uid: pendingUserDocId(email),
+        name,
+        email,
+        role: opts.role,
+        phone,
+        schoolId: opts.schoolId || 'main',
+        ...(opts.staffId ? { staffId: opts.staffId } : {}),
+        ...(opts.photoURL ? { photoURL: opts.photoURL } : {}),
+        isActive: true,
+        isFirstLogin,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const sendInvite = () => sendPasswordResetEmail(secondaryAuth, email);
+
+  try {
+    try {
+      await sendInvite();
+    } catch (e: any) {
+      if (!String(e?.code || '').includes('user-not-found')) throw e;
+      // No Auth login yet (staff added before the invite feature) — create
+      // it, then send the invite.
+      const secret = generateSecret();
+      try {
+        await createUserWithEmailAndPassword(secondaryAuth, email, secret);
+      } catch (e2: any) {
+        if (String(e2?.code || '').includes('email-already-in-use')) {
+          // It appeared between the two calls — just send the invite.
+          await sendInvite();
+          await ensureProfile(false);
+          return { status: 'invited', email, name, phone };
+        }
+        throw e2;
+      } finally {
+        await signOut(secondaryAuth).catch(() => {});
+      }
+      try {
+        await sendInvite();
+      } catch {
+        // Email still can't be sent — fall back to the one-time password.
+        await ensureProfile(true);
+        return { status: 'created', email, name, phone, tempPassword: secret };
+      }
+    }
+    await ensureProfile(false);
+    return { status: 'invited', email, name, phone };
+  } catch (e: any) {
+    return { status: 'failed', email, error: friendlyError(e) };
+  }
+}

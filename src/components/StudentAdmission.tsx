@@ -5,11 +5,12 @@
  * firestore.rules (students: write = admin only). Never render for principal.
  *
  * NOTE: the parent portal login is now auto-created on admission (see
- * services/parentAccount): when a parentEmail is saved, a Firebase Auth login
- * + `users` profile are created and the one-time temporary password is shown
- * to the admin. Linking stays automatic — the parent sees children whose
- * parentEmail matches their login email (fallback); optionally set `parentId`
- * to the parent's auth uid as well.
+ * services/loginInvite): when a parentEmail is saved, a Firebase Auth login
+ * + `users` profile are created and a set-password invite email is sent to
+ * the parent. If the email cannot be sent, a one-time temporary password is
+ * shown to the admin instead (Copy / WhatsApp). Linking stays automatic —
+ * the parent sees children whose parentEmail matches their login email
+ * (fallback); optionally set `parentId` to the parent's auth uid as well.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -19,7 +20,7 @@ import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, 
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
-import { ensureParentAccount, ParentAccountResult } from '../services/parentAccount';
+import { ensureLoginAccount, LoginInviteResult } from '../services/loginInvite';
 import { waNumber } from './FeeVoucherPrint';
 import { Student, ClassSection, FeeStatus, todayStr } from '../types';
 import {
@@ -82,8 +83,8 @@ const StudentAdmission: React.FC = () => {
   const [photoRecordId, setPhotoRecordId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  /** Result of the parent-login auto-create for the last save (shown as a banner). */
-  const [parentResult, setParentResult] = useState<ParentAccountResult | null>(null);
+  /** Result of the parent-login invite for the last save (shown as a banner). */
+  const [parentResult, setParentResult] = useState<LoginInviteResult | null>(null);
   const [copied, setCopied] = useState(false);
   /** Student whose ID card is open for printing. */
   const [idCardFor, setIdCardFor] = useState<Student | null>(null);
@@ -248,20 +249,23 @@ const StudentAdmission: React.FC = () => {
         await auditLog(currentUser.uid, currentUser.name, 'Student admitted',
           `Admitted ${payload.name} (${payload.rollNumber}, ${payload.class}-${payload.section})`);
       }
-      // Parent login auto-create: runs AFTER the student is saved, and never
+      // Parent login invite: runs AFTER the student is saved, and never
       // fails the admission — its outcome is shown as a banner instead.
       if (payload.parentEmail) {
-        const pr = await ensureParentAccount({
+        const pr = await ensureLoginAccount({
           email: payload.parentEmail,
-          parentName: payload.parentName,
-          studentName: payload.name,
+          name: payload.parentName || `Parent of ${payload.name}`,
+          role: 'parent',
           phone: payload.parentWhatsApp || payload.parentPhone,
           schoolId: currentUser.schoolId || 'main',
         });
         setParentResult(pr);
-        if (pr.status === 'created') {
+        if (pr.status === 'invited') {
+          await auditLog(currentUser.uid, currentUser.name, 'Parent invite sent',
+            `Invite email sent to parent of ${payload.name} (${pr.email})`);
+        } else if (pr.status === 'created') {
           await auditLog(currentUser.uid, currentUser.name, 'Parent login created',
-            `Created parent login for ${payload.parentName || payload.name} (${pr.email}) — temporary password shown once to admin`);
+            `Created parent login for ${payload.parentName || payload.name} (${pr.email}) — invite email failed, temporary password shown once to admin`);
         }
       } else {
         setParentResult(null);
@@ -305,9 +309,11 @@ const StudentAdmission: React.FC = () => {
   };
 
   const parentWaLink =
-    parentResult?.status === 'created' && parentResult.phone
+    parentResult && (parentResult.status === 'invited' || parentResult.status === 'created') && parentResult.phone
       ? `https://wa.me/${waNumber(parentResult.phone)}?text=${encodeURIComponent(
-          `Assalam-o-Alaikum, ${school?.name || 'school'} parent portal ka login ban gaya hai.\nBacha: ${parentResult.studentName}\nEmail: ${parentResult.email}\nTemporary password: ${parentResult.tempPassword}\nLink: ${window.location.origin}\nPehli dafa login karke apna password set kar lein.`
+          parentResult.status === 'invited'
+            ? `Assalam-o-Alaikum, ${school?.name || 'school'} parent portal ka login ban gaya hai.\nEmail: ${parentResult.email}\nApni email check karein — password set karne ka link bheja gaya hai (spam folder bhi dekhein).\nPortal: ${window.location.origin}`
+            : `Assalam-o-Alaikum, ${school?.name || 'school'} parent portal ka login ban gaya hai.\nEmail: ${parentResult.email}\nTemporary password: ${parentResult.tempPassword}\nLink: ${window.location.origin}\nPehli dafa login karke apna password set kar lein.`
         )}`
       : '';
 
@@ -387,6 +393,37 @@ const StudentAdmission: React.FC = () => {
             ))}
           </Select>
         </div>
+        {parentResult?.status === 'invited' && (
+          <div className="mx-5 mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-bold text-emerald-900">Parent ko invite email bhej di gayi hai</div>
+              <button
+                type="button"
+                onClick={() => setParentResult(null)}
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-800">
+              <b className="break-all">{parentResult.email}</b> par password set karne ka link bheja gaya hai.
+              Parent ko apni email (inbox + spam) check karne ko kaho — wo khud apna password banayega.
+            </p>
+            {parentWaLink && (
+              <div className="mt-2">
+                <a
+                  href={parentWaLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp pe batao
+                </a>
+              </div>
+            )}
+          </div>
+        )}
         {parentResult?.status === 'created' && (
           <div className="mx-5 mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
             <div className="flex items-start justify-between gap-2">

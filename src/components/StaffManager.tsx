@@ -1,15 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
-import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown } from 'lucide-react';
+import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, MessageCircle } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
-import { useCollection } from '../hooks/useFirestore';
-import { StaffMember, StaffRole, ClassSection, pendingUserDocId, formatPKR } from '../types';
+import { useCollection, useSchool } from '../hooks/useFirestore';
+import { StaffMember, StaffRole, ClassSection, formatPKR } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal,
   PrimaryButton, SearchInput, Select, Spinner, Table, TextInput, useConfirm,
 } from './ui';
 import { ImageUploadField } from './ImageUploadField';
+import { ensureLoginAccount, LoginInviteResult } from '../services/loginInvite';
+import { waNumber } from './FeeVoucherPrint';
 
 interface StaffManagerProps {
   /** Admin passes true; principal passes false — principals can never re-role a user. */
@@ -44,6 +46,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const { currentUser } = useAuth();
   const { data: staff, loading } = useCollection<StaffMember>('staff');
   const { data: classDocs } = useCollection<ClassSection>('classes');
+  const { school } = useSchool();
   const { ask, dialog } = useConfirm();
 
   const [search, setSearch] = useState('');
@@ -56,6 +59,9 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const [form, setForm] = useState<StaffForm>(emptyForm());
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Result of the login invite for the last add (shown as a banner). */
+  const [loginResult, setLoginResult] = useState<LoginInviteResult | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const logAudit = async (action: string, details: string) => {
     if (!currentUser) return;
@@ -161,6 +167,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
     // photo upload (no orphaned Storage folders for unsaved records).
     setModalId(doc(collection(db, 'staff')).id);
     setEditingId(null);
+    setLoginResult(null);
     setForm(emptyForm());
     setError('');
     setModalOpen(true);
@@ -169,6 +176,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const openEdit = (m: StaffMember) => {
     setModalId(m.id);
     setEditingId(m.id);
+    setLoginResult(null);
     setForm({
       name: m.name || '',
       email: m.email || '',
@@ -236,28 +244,26 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
         staffPayload.createdAt = new Date().toISOString();
         await setDoc(doc(db, 'staff', modalId), staffPayload);
 
-        // NOTE: the users (login) doc uses an email-keyed placeholder id.
-        // The Firebase Auth login for this email must be created separately in
-        // Firebase Console → Authentication (email/password). On first login
-        // the app adopts the placeholder to the real auth uid by direct
-        // document read (see AuthContext.loadProfile), then forces a password
-        // change (isFirstLogin=true).
-        const userPayload: Record<string, unknown> = {
-          uid: pendingUserDocId(email),
-          name,
+        await logAudit('Staff added', `${name} (${form.role}) — ${email}`);
+
+        // Login invite: creates the Auth login + users profile and emails the
+        // set-password link. Never fails the staff save — the result shows
+        // as a banner instead.
+        const lr = await ensureLoginAccount({
           email,
+          name,
           role: form.role,
           phone,
-          schoolId: 'main',
+          schoolId: currentUser?.schoolId || 'main',
           staffId: modalId,
-          isActive: true,
-          isFirstLogin: true,
-          createdAt: new Date().toISOString(),
-        };
-        if (form.photo.trim()) userPayload.photoURL = form.photo.trim();
-        await setDoc(doc(db, 'users', pendingUserDocId(email)), userPayload);
-
-        await logAudit('Staff added', `${name} (${form.role}) — ${email}`);
+          photoURL: form.photo.trim() || undefined,
+        });
+        setLoginResult(lr);
+        if (lr.status === 'invited') {
+          await logAudit('Login invite sent', `Invite email sent to ${name} (${form.role}) — ${email}`);
+        } else if (lr.status === 'created') {
+          await logAudit('Staff login created', `Login created for ${name} (${form.role}) — ${email}; invite email failed, temporary password shown once to admin`);
+        }
       } else {
         const current = staff.find((m) => m.id === editingId);
         await setDoc(doc(db, 'staff', editingId), staffPayload, { merge: true });
@@ -316,6 +322,24 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const setField = <K extends keyof StaffForm>(k: K, v: StaffForm[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const copyTempPassword = async () => {
+    if (loginResult?.status !== 'created') return;
+    try {
+      await navigator.clipboard.writeText(loginResult.tempPassword);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — the password stays visible to type out */ }
+  };
+
+  const loginWaLink =
+    loginResult && (loginResult.status === 'invited' || loginResult.status === 'created') && loginResult.phone
+      ? `https://wa.me/${waNumber(loginResult.phone)}?text=${encodeURIComponent(
+          loginResult.status === 'invited'
+            ? `Assalam-o-Alaikum, ${school?.name || 'school'} teacher/staff portal ka login ban gaya hai.\nEmail: ${loginResult.email}\nApni email check karein — password set karne ka link bheja gaya hai (spam folder bhi dekhein).\nPortal: ${window.location.origin}`
+            : `Assalam-o-Alaikum, ${school?.name || 'school'} teacher/staff portal ka login ban gaya hai.\nEmail: ${loginResult.email}\nTemporary password: ${loginResult.tempPassword}\nLink: ${window.location.origin}\nPehli dafa login karke apna password set kar lein.`
+        )}`
+      : '';
+
   const isEdit = editingId !== null;
 
   return (
@@ -349,6 +373,121 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
             <option value="staff">Staff</option>
           </Select>
         </div>
+
+        {loginResult?.status === 'invited' && (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-bold text-emerald-900">Invite email bhej di gayi hai</div>
+              <button
+                type="button"
+                onClick={() => setLoginResult(null)}
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-800">
+              <b>{loginResult.name}</b> (<span className="break-all">{loginResult.email}</span>) ko password set karne
+              ka link email kar diya gaya hai. Un ko apni email (inbox + spam) check karne ko kaho — wo khud apna
+              password banayega.
+            </p>
+            {loginWaLink && (
+              <div className="mt-2">
+                <a
+                  href={loginWaLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp pe batao
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+        {loginResult?.status === 'created' && (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-bold text-emerald-900">Login ban gaya hai (invite email nahi bheji ja saki)</div>
+              <button
+                type="button"
+                onClick={() => setLoginResult(null)}
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-800">
+              Ye temporary password dobara nahi dikhega — abhi copy ya WhatsApp kar lein.
+              Pehli dafa login pe password change karna parega.
+            </p>
+            <div className="mt-2 space-y-1.5 text-sm text-emerald-900">
+              <div>
+                Email: <b className="break-all">{loginResult.email}</b>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Temporary password:{' '}
+                  <code className="px-2 py-0.5 rounded bg-white border border-emerald-200 font-bold tracking-wide">
+                    {loginResult.tempPassword}
+                  </code>
+                </span>
+                <button
+                  type="button"
+                  onClick={copyTempPassword}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-emerald-200 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                {loginWaLink && (
+                  <a
+                    href={loginWaLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp pe bhejo
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {loginResult?.status === 'exists' && (
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-start justify-between gap-2">
+            <p className="text-sm text-slate-700">
+              Is email (<b className="break-all">{loginResult.email}</b>) ka login pehle se mojood hai — naya
+              invite nahi bheja gaya.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLoginResult(null)}
+              className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        {loginResult?.status === 'failed' && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-2">
+            <p className="text-sm text-amber-900">
+              Staff member save ho gaya, lekin login nahi ban saka: {loginResult.error}{' '}
+              Dobara save karke koshish karein, ya Firebase Console se bana lein.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLoginResult(null)}
+              className="p-1 rounded-lg text-amber-700 hover:bg-amber-100 shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <Spinner />

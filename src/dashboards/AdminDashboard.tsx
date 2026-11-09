@@ -13,6 +13,7 @@ import {
   Avatar, Badge, Card, CardHeader, EmptyState, Tabs,
 } from '../components/ui';
 import { AttendanceManager } from '../components/AttendanceManager';
+import { AttendanceRegister } from '../components/AttendanceRegister';
 import { ClassesManager } from '../components/ClassesManager';
 import { StaffAttendance } from '../components/StaffAttendance';
 import { DiaryManager } from '../components/DiaryManager';
@@ -219,6 +220,7 @@ export const AdminDashboard: React.FC<{ initialTab?: string }> = ({ initialTab }
       {tab === 'fees' && <FeesManager />}
       {tab === 'attendance' && <AttendanceManager />}
       {tab === 'staffatt' && <StaffAttendance />}
+      {tab === 'attregister' && <AttendanceRegister />}
       {tab === 'academics' && <AcademicsTab />}
       {tab === 'notices' && <NoticesManager />}
       {tab === 'holidays' && <HolidaysManager />}

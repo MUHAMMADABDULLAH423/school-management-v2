@@ -18,6 +18,16 @@ service cloud.firestore {
     function isStaffRole() { return role() == 'staff'; }
     function isParent()    { return role() == 'parent'; }
 
+    // "Today" as a YYYY-MM-DD string (UTC — matches the app's todayStr(),
+    // which is an ISO date slice, also UTC). Used to stop teachers editing
+    // past attendance; admin/principal keep full access.
+    function todayStr() {
+      return string(request.time.year()) + '-'
+        + (request.time.month() < 10 ? '0' + string(request.time.month()) : string(request.time.month())) + '-'
+        + (request.time.day() < 10 ? '0' + string(request.time.day()) : string(request.time.day()));
+    }
+    function isTodayDate(d) { return d == todayStr(); }
+
     // parentId stored on the linked student doc; parentEmail is the fallback so
     // links created before the parent's first login keep working after the
     // placeholder users doc is adopted to the real auth uid.
@@ -97,19 +107,32 @@ service cloud.firestore {
     }
 
     // ---- ATTENDANCE ----
+    // Teachers may write ONLY today's student attendance (create + update);
+    // past dates are read-only for them, enforced here AND in the UI.
+    // Admin/principal keep full access (they can correct past records).
+    // Staff self check-in is likewise today-only, own record, Present only.
     match /attendance/{id} {
       allow read: if isSignedIn() && (
         !isParent() ||
         (resource.data.type == 'student' && parentOfStudent(resource.data.studentId))
       );
-      allow create: if isAdmin() || isTeacher() ||
+      allow create: if isAdmin() ||
+        (isTeacher() && isTodayDate(request.resource.data.date)
+          && request.resource.data.type == 'student') ||
         // staff may check THEMSELVES in: own staff record only, Present only.
         // (userDoc().staffId links the login to the staff record.)
-        (isStaffRole() && request.resource.data.type == 'staff'
+        (isStaffRole() && isTodayDate(request.resource.data.date)
+          && request.resource.data.type == 'staff'
           && request.resource.data.status == 'Present'
           && request.resource.data.staffId == userDoc().staffId);
-      allow update: if isAdmin() || isTeacher() ||
-        (isStaffRole() && request.resource.data.type == 'staff'
+      allow update: if isAdmin() ||
+        (isTeacher() && isTodayDate(resource.data.date)
+          && request.resource.data.date == resource.data.date
+          && request.resource.data.type == 'student'
+          && resource.data.type == 'student') ||
+        (isStaffRole() && isTodayDate(resource.data.date)
+          && request.resource.data.date == resource.data.date
+          && request.resource.data.type == 'staff'
           && request.resource.data.status == 'Present'
           && request.resource.data.staffId == userDoc().staffId
           && resource.data.staffId == userDoc().staffId);

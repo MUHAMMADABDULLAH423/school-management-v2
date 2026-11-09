@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, Building2, BadgeDollarSign, ScrollText,
-  GraduationCap, UserCog, CalendarCheck, ClipboardList,
+  GraduationCap, UserCog, CalendarCheck, CalendarRange, ClipboardList,
   Bell, CalendarDays, Wallet, BookOpen, Trophy, FileText, IdCard, Clock,
   Menu, MapPin, Layers, LogOut,
 } from 'lucide-react';
@@ -33,6 +33,7 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'overview', label: 'Executive Overview', icon: <LayoutDashboard className={iconCls} /> },
     { id: 'staff', label: 'Teachers & Staff', icon: <Users className={iconCls} /> },
     { id: 'classes', label: 'Classes', icon: <Layers className={iconCls} /> },
+    { id: 'attregister', label: 'Attendance Register', icon: <CalendarRange className={iconCls} /> },
     { id: 'school', label: 'School Profile', icon: <Building2 className={iconCls} /> },
     { id: 'fees', label: 'Fee Overview', icon: <BadgeDollarSign className={iconCls} /> },
     { id: 'finance', label: 'Finance', icon: <Wallet className={iconCls} /> },
@@ -47,6 +48,7 @@ const NAV: Record<UserRole, NavItem[]> = {
     { id: 'fees', label: 'Fees', icon: <BadgeDollarSign className={iconCls} /> },
     { id: 'attendance', label: 'Attendance', icon: <CalendarCheck className={iconCls} /> },
     { id: 'staffatt', label: 'Staff Attendance', icon: <ClipboardList className={iconCls} /> },
+    { id: 'attregister', label: 'Attendance Register', icon: <CalendarRange className={iconCls} /> },
     { id: 'academics', label: 'Academics', icon: <BookOpen className={iconCls} /> },
     { id: 'notices', label: 'Notices', icon: <Bell className={iconCls} /> },
     { id: 'holidays', label: 'Holidays', icon: <CalendarDays className={iconCls} /> },

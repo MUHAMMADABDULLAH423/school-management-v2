@@ -57,6 +57,11 @@ export const AttendanceManager: React.FC = () => {
   // assigned-classes scoping.)
   const isTeacher = currentUser?.role === 'teacher';
   const myStaffId = currentUser?.staffId;
+  /** Teachers may only EDIT today's attendance; past dates are read-only.
+   * (todayStr() is UTC-based — same as the date picker's max — and the
+   * Firestore rules enforce the same boundary server-side.) */
+  const isToday = date === todayStr();
+  const readOnly = isTeacher && !isToday;
   const p1Classes = useMemo(() => {
     if (!isTeacher || !myStaffId) return [];
     const set = new Set<string>();
@@ -111,6 +116,7 @@ export const AttendanceManager: React.FC = () => {
     marks[id] ?? existingForDate[id]?.status ?? 'Present';
 
   const markAll = (s: AttendanceStatus) => {
+    if (readOnly) return;
     const next: Record<string, AttendanceStatus> = {};
     classStudents.forEach((st) => { next[st.id] = s; });
     setMarks(next);
@@ -118,6 +124,12 @@ export const AttendanceManager: React.FC = () => {
 
   const save = async () => {
     if (!currentUser || !sel || classStudents.length === 0) return;
+    // Teachers can only save TODAY's attendance — past dates are read-only
+    // (the buttons are disabled too; this is the save-time guard).
+    if (isTeacher && !isToday) {
+      setSavedMsg('Poorani date ki attendance edit nahi kar sakte — sirf aaj ki attendance lagayi ja sakti hai.');
+      return;
+    }
     // Save-time guard to match the dropdown: a teacher can only save the
     // classes the timetable gives them at P1.
     if (isTeacher && !p1Classes.includes(sel)) {
@@ -173,14 +185,20 @@ export const AttendanceManager: React.FC = () => {
             <TextInput type="date" value={date} max={todayStr()} onChange={(e) => { setDate(e.target.value); setMarks({}); setSavedMsg(''); }} />
           </Field>
           <div className="flex items-end gap-2">
-            <GhostButton type="button" onClick={() => markAll('Present')} className="flex-1">
+            <GhostButton type="button" onClick={() => markAll('Present')} disabled={readOnly} className="flex-1">
               <CheckCircle2 className="w-4 h-4" /> All Present
             </GhostButton>
-            <PrimaryButton type="button" onClick={save} disabled={saving || classStudents.length === 0} className="flex-1">
+            <PrimaryButton type="button" onClick={save} disabled={saving || classStudents.length === 0 || readOnly} className="flex-1">
               <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save'}
             </PrimaryButton>
           </div>
         </div>
+
+        {readOnly && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            Ye poorani date ki attendance hai — sirf dekh sakte hain, edit nahi kar sakte. Aaj ({todayStr()}) ki attendance lagane ke liye date aaj ki rakhein.
+          </div>
+        )}
 
         {savedMsg && (
           <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
@@ -227,8 +245,9 @@ export const AttendanceManager: React.FC = () => {
                       <button
                         key={s}
                         type="button"
+                        disabled={readOnly}
                         onClick={() => setMarks((p) => ({ ...p, [st.id]: s }))}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors disabled:opacity-50 ${
                           m === s
                             ? 'bg-indigo-600 border-indigo-600 text-white'
                             : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'

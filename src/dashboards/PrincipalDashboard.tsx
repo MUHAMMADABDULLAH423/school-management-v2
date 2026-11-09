@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ExecutiveDashboard } from '../components/ExecutiveDashboard';
+import { AttendanceRegister } from '../components/AttendanceRegister';
 import { StaffManager } from '../components/StaffManager';
 import { ClassesManager } from '../components/ClassesManager';
 import UserManager from '../components/UserManager';
@@ -57,6 +58,7 @@ export const PrincipalDashboard: React.FC<{ initialTab?: string }> = ({ initialT
       {activeTab === 'overview' && <ExecutiveDashboard />}
       {activeTab === 'staff' && <StaffManager />}
       {activeTab === 'classes' && <ClassesManager />}
+      {activeTab === 'attregister' && <AttendanceRegister />}
       {activeTab === 'users' && <UserManager />}
       {activeTab === 'school' && <SchoolProfile />}
       {activeTab === 'fees' && <PrincipalFeeView />}

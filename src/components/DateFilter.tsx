@@ -1,6 +1,6 @@
 import React from 'react';
-import { Calendar, CalendarDays, CalendarRange, RotateCcw } from 'lucide-react';
-import { DateFilterState, DateFilterMode, defaultDateFilter, monthStr } from '../types';
+import { CalendarDays, CalendarRange, RotateCcw } from 'lucide-react';
+import { DateFilterState, DateFilterMode, defaultDateFilter } from '../types';
 import { Card, CardHeader, GhostButton, inputCls } from './ui';
 
 /** "2026-09" -> "Sep 2026" */
@@ -14,18 +14,6 @@ export const monthLabel = (ym: string): string => {
   return `${names[idx] || ''} ${y}`;
 };
 
-/** Last 6 calendar months as YYYY-MM, newest last. */
-const lastSixMonths = (): string[] => {
-  const out: string[] = [];
-  const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    // 15th at noon avoids UTC month-boundary slips in monthStr()
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 15, 12);
-    out.push(monthStr(d));
-  }
-  return out;
-};
-
 /** Filter label text: single -> date; range -> "start → end"; months -> "N month(s)". */
 export const filterLabelFor = (f: DateFilterState): string => {
   if (f.mode === 'single') return f.singleDate;
@@ -37,7 +25,6 @@ export const filterLabelFor = (f: DateFilterState): string => {
 const modes: { id: DateFilterMode; label: string; icon: React.ReactNode }[] = [
   { id: 'single', label: 'Single day', icon: <CalendarDays className="w-4 h-4" /> },
   { id: 'range', label: 'Date range', icon: <CalendarRange className="w-4 h-4" /> },
-  { id: 'months', label: 'Months', icon: <Calendar className="w-4 h-4" /> },
 ];
 
 export const DateFilter: React.FC<{
@@ -47,15 +34,6 @@ export const DateFilter: React.FC<{
   compact?: boolean;
 }> = ({ filter, onChange, compact = false }) => {
   const set = (patch: Partial<DateFilterState>) => onChange({ ...filter, ...patch });
-
-  const toggleMonth = (ym: string) => {
-    const has = filter.selectedMonths.includes(ym);
-    const next = has
-      ? filter.selectedMonths.filter((m) => m !== ym)
-      : [...filter.selectedMonths, ym];
-    if (next.length === 0) return; // keep ≥1 selected
-    set({ selectedMonths: next });
-  };
 
   const handleStart = (v: string) =>
     set({ startDate: v, endDate: v > filter.endDate ? v : filter.endDate });
@@ -129,30 +107,6 @@ export const DateFilter: React.FC<{
                 onChange={(e) => handleEnd(e.target.value)}
               />
             </div>
-          </div>
-        )}
-
-        {filter.mode === 'months' && (
-          <div className="flex flex-wrap gap-2">
-            {lastSixMonths().map((ym) => {
-              const active = filter.selectedMonths.includes(ym);
-              return (
-                <button
-                  key={ym}
-                  type="button"
-                  onClick={() => toggleMonth(ym)}
-                  className={`rounded-full font-semibold border transition-colors ${
-                    compact ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm'
-                  } ${
-                    active
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                      : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-700'
-                  }`}
-                >
-                  {monthLabel(ym)}
-                </button>
-              );
-            })}
           </div>
         )}
       </div>

@@ -15,6 +15,7 @@ import {
 import { NoticeList } from '../components/NoticeList';
 import { ParentPayModal } from '../components/ParentPayModal';
 import { AttendanceRegister } from '../components/AttendanceRegister';
+import ResultCardPrint from '../components/ResultCardPrint';
 // Built by a sibling agent — imported normally (default export):
 import FeeVoucherPrint from '../components/FeeVoucherPrint';
 
@@ -98,24 +99,57 @@ const ResultsTab: React.FC = () => {
   const { currentUser } = useAuth();
   const { children, students, loading } = useChildren(currentUser);
   const { data: results, loading: loadingRes } = useCollection<ExamResult>('results');
+  const { school } = useSchool();
+  const [childId, setChildId] = useState('');
+  const [printFor, setPrintFor] = useState<Student | null>(null);
+
+  // Report card is per child — default to the first child.
+  const selectedId = childId || children[0]?.id || '';
+  const selectedChild = children.find((c) => c.id === selectedId);
+  const selectedResults = useMemo(
+    () => results.filter((r) => r.studentId === selectedId),
+    [results, selectedId]
+  );
 
   const ids = useMemo(() => new Set(children.map((c) => c.id)), [children]);
   const groups = useMemo(() => {
     const g = new Map<string, ExamResult[]>();
-    results.filter((r) => ids.has(r.studentId)).forEach((r) => {
+    results.filter((r) => ids.has(r.studentId) && (!selectedId || r.studentId === selectedId)).forEach((r) => {
       const key = `${r.examType} — ${r.subject} (${r.date})`;
       if (!g.has(key)) g.set(key, []);
       g.get(key)!.push(r);
     });
     return [...g.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [results, ids]);
+  }, [results, ids, selectedId]);
   const nameOf = (id: string) => students.find((s) => s.id === id)?.name || '—';
 
   if (loading || loadingRes) return <Spinner />;
 
   return (
     <Card>
-      <CardHeader title="Exam Results" subtitle="Grouped by exam." />
+      <CardHeader
+        title="Exam Results"
+        subtitle="Grouped by exam. Print a proper report card for any child."
+        action={
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedId}
+              onChange={(e) => setChildId(e.target.value)}
+              className="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white"
+            >
+              {children.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <PrimaryButton
+              type="button"
+              onClick={() => selectedChild && setPrintFor(selectedChild)}
+              disabled={!selectedChild}
+              className="!px-3 !py-2 text-xs"
+            >
+              <Printer className="w-4 h-4" /> Print Report Card
+            </PrimaryButton>
+          </div>
+        }
+      />
       <div className="p-5">
         {groups.length === 0 ? (
           <EmptyState title="No results yet" hint="Results appear here once teachers enter them." />
@@ -143,6 +177,14 @@ const ResultsTab: React.FC = () => {
           </div>
         )}
       </div>
+      {printFor && (
+        <ResultCardPrint
+          student={printFor}
+          results={selectedResults}
+          school={school as SchoolProfile | null}
+          onClose={() => setPrintFor(null)}
+        />
+      )}
     </Card>
   );
 };

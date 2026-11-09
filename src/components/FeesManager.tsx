@@ -22,6 +22,7 @@ import {
 } from './ui';
 import FeeVoucherPrint, { buildWaLink } from './FeeVoucherPrint';
 import FamilyVoucherPrint, { FamilyEntry } from './FamilyVoucherPrint';
+import { PaymentClaims } from './PaymentClaims';
 
 const statusTone = (s: FeeStatus): 'green' | 'amber' | 'blue' | 'red' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'amber' : s === 'Pending' ? 'blue' : 'red';
@@ -275,6 +276,8 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
 
   return (
     <div className="space-y-5">
+      <PaymentClaims />
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <button type="button" onClick={() => toggleStatus('paid')} title="Show paid vouchers" className={cardBtn(statusFilter === 'paid')}>
           <StatCard

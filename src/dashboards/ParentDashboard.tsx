@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Printer,
+  Printer, Wallet,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import {
-  AttendanceRecord, DiaryEntry, ExamResult, FeeVoucher, SchoolProfile, Student,
+  AttendanceRecord, DiaryEntry, ExamResult, FeeVoucher, PaymentClaim, SchoolProfile, Student,
   formatPKR, gradeFor, isOwnChild,
 } from '../types';
 import {
@@ -13,6 +13,7 @@ import {
   Spinner, Table,
 } from '../components/ui';
 import { NoticeList } from '../components/NoticeList';
+import { ParentPayModal } from '../components/ParentPayModal';
 // Built by a sibling agent — imported normally (default export):
 import FeeVoucherPrint from '../components/FeeVoucherPrint';
 
@@ -202,14 +203,25 @@ const FeesTab: React.FC = () => {
   const { currentUser } = useAuth();
   const { children, loading } = useChildren(currentUser);
   const { data: vouchers, loading: loadingFees } = useCollection<FeeVoucher>('fees');
+  const { data: claims } = useCollection<PaymentClaim>('paymentClaims');
   const { school } = useSchool();
   const [printVoucher, setPrintVoucher] = useState<FeeVoucher | null>(null);
+  const [payFor, setPayFor] = useState<FeeVoucher | null>(null);
 
   const ids = useMemo(() => new Set(children.map((c) => c.id)), [children]);
   const mine = useMemo(
     () => vouchers.filter((v) => ids.has(v.studentId)).sort((a, b) => b.month.localeCompare(a.month)),
     [vouchers, ids]
   );
+  /** Latest online-payment claim per voucher (for my children only). */
+  const claimOf = useMemo(() => {
+    const map = new Map<string, PaymentClaim>();
+    claims
+      .filter((c) => ids.has(c.studentId))
+      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+      .forEach((c) => map.set(c.feeId, c));
+    return map;
+  }, [claims, ids]);
   const studentOf = (id: string): Student | undefined => children.find((c) => c.id === id);
   const nameOf = (id: string) => studentOf(id)?.name || '—';
 
@@ -217,28 +229,52 @@ const FeesTab: React.FC = () => {
 
   return (
     <Card>
-      <CardHeader title="Fee Vouchers" subtitle="Your children's fee challans. Print any voucher." />
+      <CardHeader title="Fee Vouchers" subtitle="Your children's fee challans. Print any voucher, or pay a pending fee online." />
       <div className="p-5">
         {mine.length === 0 ? (
           <EmptyState title="No fee vouchers" hint="Vouchers appear here once the office generates them." />
         ) : (
-          <Table head={['Voucher', 'Month', 'Child', 'Total', 'Paid', 'Due', 'Status', 'Print']}>
-            {mine.map((v) => (
-              <tr key={v.id}>
-                <td className="px-3 py-2 font-semibold text-slate-900">{v.voucherNumber}</td>
-                <td className="px-3 py-2 text-slate-600">{v.month}</td>
-                <td className="px-3 py-2">{nameOf(v.studentId)}</td>
-                <td className="px-3 py-2">{formatPKR(v.totalAmount)}</td>
-                <td className="px-3 py-2">{formatPKR(v.paidAmount)}</td>
-                <td className="px-3 py-2 font-bold text-rose-700">{formatPKR(v.dueAmount)}</td>
-                <td className="px-3 py-2"><Badge tone={feeTone(v.status)}>{v.status}</Badge></td>
-                <td className="px-3 py-2">
-                  <PrimaryButton type="button" onClick={() => setPrintVoucher(v)} className="!px-3 !py-1.5 text-xs">
-                    <Printer className="w-3.5 h-3.5" /> Print
-                  </PrimaryButton>
-                </td>
-              </tr>
-            ))}
+          <Table head={['Voucher', 'Month', 'Child', 'Total', 'Paid', 'Due', 'Status', 'Pay', 'Print']}>
+            {mine.map((v) => {
+              const claim = claimOf.get(v.id);
+              const payable = (v.dueAmount || 0) > 0 && v.status !== 'Paid';
+              return (
+                <tr key={v.id}>
+                  <td className="px-3 py-2 font-semibold text-slate-900">{v.voucherNumber}</td>
+                  <td className="px-3 py-2 text-slate-600">{v.month}</td>
+                  <td className="px-3 py-2">{nameOf(v.studentId)}</td>
+                  <td className="px-3 py-2">{formatPKR(v.totalAmount)}</td>
+                  <td className="px-3 py-2">{formatPKR(v.paidAmount)}</td>
+                  <td className="px-3 py-2 font-bold text-rose-700">{formatPKR(v.dueAmount)}</td>
+                  <td className="px-3 py-2"><Badge tone={feeTone(v.status)}>{v.status}</Badge></td>
+                  <td className="px-3 py-2">
+                    {!payable ? (
+                      <span className="text-slate-400 text-xs">—</span>
+                    ) : claim?.status === 'pending' ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                        Under review
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-1 items-start">
+                        <PrimaryButton type="button" onClick={() => setPayFor(v)} className="!px-3 !py-1.5 text-xs">
+                          <Wallet className="w-3.5 h-3.5" /> Pay online
+                        </PrimaryButton>
+                        {claim?.status === 'rejected' && (
+                          <span className="text-[11px] font-semibold text-rose-600">
+                            Last payment rejected — check the notice, then resubmit.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <PrimaryButton type="button" onClick={() => setPrintVoucher(v)} className="!px-3 !py-1.5 text-xs">
+                      <Printer className="w-3.5 h-3.5" /> Print
+                    </PrimaryButton>
+                  </td>
+                </tr>
+              );
+            })}
           </Table>
         )}
       </div>
@@ -248,6 +284,14 @@ const FeesTab: React.FC = () => {
           student={studentOf(printVoucher.studentId) as Student}
           school={school as SchoolProfile | null}
           onClose={() => setPrintVoucher(null)}
+        />
+      )}
+      {payFor && studentOf(payFor.studentId) && (
+        <ParentPayModal
+          voucher={payFor}
+          student={studentOf(payFor.studentId) as Student}
+          school={school as SchoolProfile | null}
+          onClose={() => setPayFor(null)}
         />
       )}
     </Card>

@@ -28,6 +28,10 @@ interface ProfileForm {
   lng: string;
   radius: string;
   logo: string;
+  easypaisaTitle: string;
+  easypaisaNumber: string;
+  jazzcashTitle: string;
+  jazzcashNumber: string;
 }
 
 interface BankForm {
@@ -55,6 +59,7 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
     name: '', address: '', contact: '', email: '',
     affiliation: '', registrationNumber: '', academicYear: '',
     lat: '', lng: '', radius: '100', logo: '',
+    easypaisaTitle: '', easypaisaNumber: '', jazzcashTitle: '', jazzcashNumber: '',
   });
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const initialized = useRef(false);
@@ -86,6 +91,10 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
         lng: school.gpsLocation ? String(school.gpsLocation.lng) : '',
         radius: school.gpsLocation ? String(school.gpsLocation.radius) : '100',
         logo: school.logo || '',
+        easypaisaTitle: school.easypaisa?.accountTitle || '',
+        easypaisaNumber: school.easypaisa?.accountNumber || '',
+        jazzcashTitle: school.jazzcash?.accountTitle || '',
+        jazzcashNumber: school.jazzcash?.accountNumber || '',
       });
       setBanks(school.bankAccounts || []);
     }
@@ -192,6 +201,14 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
         },
         logo: form.logo.trim(),
         bankAccounts: banks,
+        easypaisa: {
+          accountTitle: form.easypaisaTitle.trim(),
+          accountNumber: form.easypaisaNumber.trim(),
+        },
+        jazzcash: {
+          accountTitle: form.jazzcashTitle.trim(),
+          accountNumber: form.jazzcashNumber.trim(),
+        },
       };
       if (!school) payload.createdAt = new Date().toISOString();
       await setDoc(doc(db, 'schools', 'main'), payload, { merge: true });
@@ -476,6 +493,40 @@ export const SchoolProfile: React.FC<SchoolProfileProps> = ({ setupMode = false 
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-6">
+        <div className="mb-1">
+          <h4 className="text-sm font-bold text-slate-800">Online payment accounts (Easypaisa / JazzCash)</h4>
+          <p className="text-xs text-slate-500">
+            Parents paying online see these on the Pay screen. Leave a method blank to hide it —
+            bank accounts above are offered automatically as well.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="text-sm font-bold text-emerald-700 mb-3">Easypaisa</div>
+            <div className="space-y-3">
+              <Field label="Account title">
+                <TextInput value={form.easypaisaTitle} onChange={(e) => setField('easypaisaTitle', e.target.value)} disabled={!canEdit} placeholder="e.g. Green Wood School" />
+              </Field>
+              <Field label="Easypaisa number">
+                <TextInput value={form.easypaisaNumber} onChange={(e) => setField('easypaisaNumber', e.target.value)} disabled={!canEdit} placeholder="e.g. 0300 1234567" className="font-mono" />
+              </Field>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-4">
+            <div className="text-sm font-bold text-rose-600 mb-3">JazzCash</div>
+            <div className="space-y-3">
+              <Field label="Account title">
+                <TextInput value={form.jazzcashTitle} onChange={(e) => setField('jazzcashTitle', e.target.value)} disabled={!canEdit} placeholder="e.g. Green Wood School" />
+              </Field>
+              <Field label="JazzCash number">
+                <TextInput value={form.jazzcashNumber} onChange={(e) => setField('jazzcashNumber', e.target.value)} disabled={!canEdit} placeholder="e.g. 0300 1234567" className="font-mono" />
+              </Field>
+            </div>
+          </div>
+        </div>
       </div>
 
       {error && (

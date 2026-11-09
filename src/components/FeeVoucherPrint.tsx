@@ -120,7 +120,11 @@ const FeeVoucherPrint: React.FC<Props> = ({ voucher, student, school, onClose })
             <div className="mt-1 font-extrabold text-slate-900">
               Payment Channel: {voucher.paymentChannel === 'bank'
                 ? `Bank${voucher.paymentBank ? ` — ${voucher.paymentBank}` : ''}`
-                : 'Cash on Counter'}
+                : voucher.paymentChannel === 'easypaisa'
+                  ? `Easypaisa${voucher.paymentBank ? ` — ${voucher.paymentBank}` : ''}`
+                  : voucher.paymentChannel === 'jazzcash'
+                    ? `JazzCash${voucher.paymentBank ? ` — ${voucher.paymentBank}` : ''}`
+                    : 'Cash on Counter'}
             </div>
           )}
         </div>

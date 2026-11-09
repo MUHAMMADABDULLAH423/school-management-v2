@@ -1,7 +1,7 @@
 /**
  * Core domain types — School Management System v2.
  * Firestore collection names: schools, users, students, staff, classes,
- * attendance, fees, results, exams, timetable, diary, notifications,
+ * attendance, fees, paymentClaims, results, exams, timetable, diary, notifications,
  * holidays, expenses, salary, auditLog.
  */
 
@@ -26,6 +26,9 @@ export interface SchoolProfile {
   affiliation?: string;
   registrationNumber?: string;
   bankAccounts: BankAccount[];
+  /** Mobile-wallet accounts parents pay into (shown on the parent Pay screen). */
+  easypaisa?: { accountTitle: string; accountNumber: string };
+  jazzcash?: { accountTitle: string; accountNumber: string };
   gpsLocation: { lat: number; lng: number; radius: number };
   academicYear: string;
   /** Periods per school day in the timetable (4–8, default 7). Set from the Timetable header. */
@@ -139,11 +142,44 @@ export interface FeeVoucher {
   receiptNo?: string;
   /** Snapshot of the bank account printed on the voucher */
   bankSnapshot?: string;
-  /** How the payment was received: 'cash' (counter) or 'bank'. Set at collection time. */
-  paymentChannel?: 'cash' | 'bank';
-  /** Bank account label when paymentChannel is 'bank' (e.g. "Meezan Bank — 0123…"). */
+  /** How the payment was received: 'cash' (counter), 'bank', 'easypaisa' or
+   * 'jazzcash'. Set at collection time (counter) or at claim approval. */
+  paymentChannel?: 'cash' | 'bank' | 'easypaisa' | 'jazzcash';
+  /** Bank/wallet account label when paymentChannel is not 'cash'
+   * (e.g. "Meezan Bank — 0123…" or "Easypaisa — 0300…"). */
   paymentBank?: string;
   createdAt: string;
+}
+
+/** Online payment method a parent can pay with (manual transfer + proof). */
+export type PaymentMethod = 'easypaisa' | 'jazzcash' | 'bank';
+
+export type PaymentClaimStatus = 'pending' | 'approved' | 'rejected';
+
+/**
+ * A parent's online fee-payment claim: they paid via Easypaisa/JazzCash/bank
+ * and submitted the transaction ID + screenshot as proof. An admin approves
+ * (fee is then marked paid) or rejects it. Parents can only create claims
+ * for their own children; only admins can review them.
+ */
+export interface PaymentClaim {
+  id: string;
+  studentId: string;
+  feeId: string; // fee voucher doc id
+  month: string; // YYYY-MM
+  amount: number;
+  method: PaymentMethod;
+  /** Snapshot of the account paid into, e.g. "Easypaisa — 0300…" */
+  methodLabel: string;
+  txnId: string;
+  /** Downscaled base64 screenshot of the payment receipt (no Storage needed). */
+  screenshot?: string;
+  status: PaymentClaimStatus;
+  submittedBy: string; // parent name
+  submittedAt: string; // ISO timestamp
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
 }
 
 export interface ExamResult {

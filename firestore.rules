@@ -150,6 +150,20 @@ service cloud.firestore {
       allow create, update, delete: if role() == 'admin';
     }
 
+    // ---- ONLINE FEE PAYMENT CLAIMS (parent submits proof, admin approves) ----
+    // Parents create claims for their OWN children only (status must start
+    // 'pending'); only admins can review them. A claim never pays a fee by
+    // itself — the admin's Approve writes the fee voucher.
+    match /paymentClaims/{claimId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || (isParent() && parentOfStudent(resource.data.studentId))
+      );
+      allow create: if isSignedIn() && isParent()
+        && parentOfStudent(request.resource.data.studentId)
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
     // ---- RESULTS / MARKS ----
     match /results/{resultId} {
       allow read: if isSignedIn() && (

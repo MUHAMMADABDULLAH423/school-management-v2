@@ -14,9 +14,9 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  addDoc, collection, doc, updateDoc,
+  addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, Mail, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, Mail, Trash2, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
@@ -87,6 +87,9 @@ const StudentAdmission: React.FC = () => {
   const [parentResult, setParentResult] = useState<LoginInviteResult | null>(null);
   /** Email of the student row whose parent invite is being (re)sent. */
   const [invitingEmail, setInvitingEmail] = useState('');
+  /** Page-level result message (e.g. after a delete). */
+  const [msg, setMsg] = useState('');
+  const [msgIsError, setMsgIsError] = useState(false);
   const [copied, setCopied] = useState(false);
   /** Student whose ID card is open for printing. */
   const [idCardFor, setIdCardFor] = useState<Student | null>(null);
@@ -337,6 +340,57 @@ const StudentAdmission: React.FC = () => {
     });
   };
 
+  /** Permanently delete a student + their fee vouchers, attendance records
+   * and marks. The parent's login is NEVER deleted here — it is shared
+   * across siblings (family). Use Deactivate for real students who leave;
+   * Delete is for test/duplicate records. */
+  const deleteStudent = async (s: Student) => {
+    const user = currentUser;
+    if (!user) return;
+    let counts = { vouchers: -1, attendance: -1, marks: -1 };
+    try {
+      const [v, a, m] = await Promise.all([
+        getDocs(query(collection(db, 'fees'), where('studentId', '==', s.id))),
+        getDocs(query(collection(db, 'attendance'), where('studentId', '==', s.id))),
+        getDocs(query(collection(db, 'results'), where('studentId', '==', s.id))),
+      ]);
+      counts = { vouchers: v.size, attendance: a.size, marks: m.size };
+    } catch { /* counts are best-effort; deletion still asks */ }
+    const parts: string[] = [];
+    if (counts.vouchers > 0) parts.push(`${counts.vouchers} fee voucher${counts.vouchers === 1 ? '' : 's'}`);
+    if (counts.attendance > 0) parts.push(`${counts.attendance} attendance record${counts.attendance === 1 ? '' : 's'}`);
+    if (counts.marks > 0) parts.push(`${counts.marks} mark${counts.marks === 1 ? '' : 's'}`);
+    ask({
+      title: 'Delete student?',
+      message: `Delete ${s.name} (${s.rollNumber}, ${s.class}-${s.section}) permanently?${
+        parts.length > 0
+          ? ` Their ${parts.join(', ')} will also be deleted.`
+          : ' They have no fee, attendance or marks records.'
+      } The parent's login is kept (it may belong to siblings). This cannot be undone.`,
+      confirmLabel: 'Delete permanently',
+      onConfirm: async () => {
+        try {
+          const [v, a, m] = await Promise.all([
+            getDocs(query(collection(db, 'fees'), where('studentId', '==', s.id))),
+            getDocs(query(collection(db, 'attendance'), where('studentId', '==', s.id))),
+            getDocs(query(collection(db, 'results'), where('studentId', '==', s.id))),
+          ]);
+          for (const d of v.docs) await deleteDoc(d.ref);
+          for (const d of a.docs) await deleteDoc(d.ref);
+          for (const d of m.docs) await deleteDoc(d.ref);
+          await deleteDoc(doc(db, 'students', s.id));
+          await auditLog(user.uid, user.name, 'Student deleted',
+            `Deleted ${s.name} (${s.rollNumber}, ${s.class}-${s.section}); also removed ${v.size} fee voucher(s), ${a.size} attendance record(s), ${m.size} mark(s)`);
+          setMsgIsError(false);
+          setMsg(`${s.name} deleted.`);
+        } catch (e: any) {
+          setMsgIsError(true);
+          setMsg(e?.message || 'Failed to delete student.');
+        }
+      },
+    });
+  };
+
   const copyTempPassword = async () => {
     if (parentResult?.status !== 'created') return;
     try {
@@ -544,6 +598,20 @@ const StudentAdmission: React.FC = () => {
             </button>
           </div>
         )}
+        {msg && (
+          <div className={`mx-5 mt-4 rounded-xl border px-4 py-3 flex items-start justify-between gap-2 ${msgIsError ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
+            <p className={`text-sm font-semibold ${msgIsError ? 'text-rose-900' : 'text-emerald-900'}`}>{msg}</p>
+            <button
+              type="button"
+              onClick={() => setMsg('')}
+              className={`p-1 rounded-lg shrink-0 ${msgIsError ? 'text-rose-700 hover:bg-rose-100' : 'text-emerald-700 hover:bg-emerald-100'}`}
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <Spinner />
         ) : filtered.length === 0 ? (
@@ -620,6 +688,14 @@ const StudentAdmission: React.FC = () => {
                       <Mail className="w-4 h-4" />
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => deleteStudent(s)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                    title="Delete permanently"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </td>
               </tr>
             ))}

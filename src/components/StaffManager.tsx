@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
-import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, MessageCircle, Mail } from 'lucide-react';
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
+import { Pencil, Plus, Trash2, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, MessageCircle, Mail } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
@@ -62,6 +62,8 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const [modalId, setModalId] = useState('');
   const [form, setForm] = useState<StaffForm>(emptyForm());
   const [error, setError] = useState('');
+  /** Page-level result message (e.g. after a delete). */
+  const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
   /** Result of the login invite for the last add (shown as a banner). */
   const [loginResult, setLoginResult] = useState<LoginInviteResult | null>(null);
@@ -339,6 +341,53 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
           next ? 'Staff activated' : 'Staff deactivated',
           `${m.name} (${m.role}) — isActive=${next}`
         );
+      },
+    });
+  };
+
+  /** Permanently delete a staff member + their timetable periods + staff
+   * check-in records + login profile (if any). Student records, fee
+   * vouchers, student attendance and diary entries are never touched
+   * (student attendance rows carry studentId, not staffId). */
+  const deleteMember = async (m: StaffMember) => {
+    let periodCount = -1;
+    try {
+      const slotSnap = await getDocs(
+        query(collection(db, 'timetable'), where('teacherId', '==', m.id))
+      );
+      periodCount = slotSnap.size;
+    } catch { /* count is best-effort; deletion still asks */ }
+    ask({
+      title: 'Delete staff member?',
+      message: `Delete ${m.name} (${m.email}) permanently?${
+        periodCount > 0
+          ? ` Their ${periodCount} timetable period${periodCount === 1 ? '' : 's'} and staff check-in records will also be deleted.`
+          : ' Their staff check-in records will also be deleted.'
+      } This cannot be undone.`,
+      confirmLabel: 'Delete permanently',
+      onConfirm: async () => {
+        try {
+          const slotSnap = await getDocs(
+            query(collection(db, 'timetable'), where('teacherId', '==', m.id))
+          );
+          for (const d of slotSnap.docs) await deleteDoc(d.ref);
+          const attSnap = await getDocs(
+            query(collection(db, 'attendance'), where('staffId', '==', m.id))
+          );
+          for (const d of attSnap.docs) await deleteDoc(d.ref);
+          const userSnap = await getDocs(
+            query(collection(db, 'users'), where('email', '==', m.email))
+          );
+          for (const d of userSnap.docs) await deleteDoc(d.ref);
+          await deleteDoc(doc(db, 'staff', m.id));
+          await logAudit(
+            'Staff member deleted',
+            `Deleted ${m.name} (${m.role}) — ${m.email}; also removed ${slotSnap.size} timetable period(s), ${attSnap.size} staff check-in record(s)${userSnap.size > 0 ? ` and ${userSnap.size} login profile(s)` : ''}`
+          );
+          setMsg(`${m.name} deleted.`);
+        } catch (e: any) {
+          setMsg(e?.message || 'Failed to delete staff member.');
+        }
       },
     });
   };
@@ -639,6 +688,20 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
           </div>
         )}
 
+        {msg && (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-emerald-900">{msg}</p>
+            <button
+              type="button"
+              onClick={() => setMsg('')}
+              className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <Spinner />
         ) : filtered.length === 0 ? (
@@ -717,9 +780,17 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                       m.isActive
                         ? 'text-slate-500 hover:bg-rose-50 hover:text-rose-700'
                         : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'
-                    }`}
+                    } mr-1`}
                   >
                     {m.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMember(m)}
+                    title="Delete permanently"
+                    className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </td>
               </tr>

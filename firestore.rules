@@ -87,7 +87,8 @@ service cloud.firestore {
     match /staff/{staffId} {
       allow get, list: if isSignedIn();
       allow create, update: if isPrincipal() || role() == 'admin';
-      allow delete: if role() == 'admin';
+      // principal manages staff too (in-app delete from Teachers & Staff)
+      allow delete: if isAdmin();
     }
 
     match /classes/{classId} {
@@ -112,7 +113,10 @@ service cloud.firestore {
           && request.resource.data.status == 'Present'
           && request.resource.data.staffId == userDoc().staffId
           && resource.data.staffId == userDoc().staffId);
-      allow delete: if role() == 'admin';
+      // delete widened so the principal's staff-delete cascade can remove
+      // the deleted member's check-in records (student rows are untouched:
+      // the cascade only matches staffId)
+      allow delete: if isAdmin();
     }
 
     // ---- FEES ----
@@ -146,7 +150,10 @@ service cloud.firestore {
 
     match /timetable/{slotId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if role() == 'admin';
+      allow create, update: if role() == 'admin';
+      // delete widened so the principal's staff-delete cascade can remove
+      // the deleted teacher's periods (timetable editing stays admin-only)
+      allow delete: if isAdmin();
     }
 
     match /diary/{diaryId} {

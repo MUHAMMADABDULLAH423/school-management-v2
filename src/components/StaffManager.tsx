@@ -647,7 +647,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
             hint={staff.length === 0 ? 'Add your first teacher or staff member to get started.' : 'Try a different search or role filter.'}
           />
         ) : (
-          <Table head={['Member', 'Role', 'Designation', 'Department', 'Phone', 'Classes', 'Status', '']}>
+          <Table head={['Member', 'Role', 'Phone', 'Classes', 'Status', '']}>
             {filtered.map((m) => (
               <tr key={m.id} className="hover:bg-slate-50">
                 <td className="px-3 py-2.5">
@@ -669,8 +669,6 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                     {m.role === 'teacher' ? 'Teacher' : 'Staff'}
                   </Badge>
                 </td>
-                <td className="px-3 py-2.5 text-slate-700">{m.designation || '—'}</td>
-                <td className="px-3 py-2.5 text-slate-700">{m.department || '—'}</td>
                 <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{m.phone || '—'}</td>
                 <td className="px-3 py-2.5">
                   <span className="text-slate-700" title={(m.assignedClasses || []).join(', ')}>
@@ -786,20 +784,6 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                 <option value="staff">Staff (non-teaching)</option>
               </Select>
             </Field>
-            <Field label="Designation">
-              <TextInput
-                value={form.designation}
-                onChange={(e) => setField('designation', e.target.value)}
-                placeholder="e.g. Senior Mathematics Faculty"
-              />
-            </Field>
-            <Field label="Department">
-              <TextInput
-                value={form.department}
-                onChange={(e) => setField('department', e.target.value)}
-                placeholder="e.g. Mathematics, Accounts, Office"
-              />
-            </Field>
             <Field label="Qualification">
               <TextInput
                 value={form.qualification}
@@ -853,16 +837,13 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
       {viewing && (
         <Modal
           title="Staff Detail"
-          subtitle={`${viewing.name} · ${viewing.designation || viewing.role}`}
+          subtitle={`${viewing.name} · ${viewing.role === 'teacher' ? 'Teacher' : 'Staff'}`}
           onClose={() => setViewing(null)}
         >
           <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
             <Avatar src={viewing.photo} name={viewing.name} size={72} />
             <div className="min-w-0">
               <div className="text-lg font-extrabold text-slate-900 truncate">{viewing.name}</div>
-              <div className="text-sm text-slate-500">
-                {viewing.designation || '—'}{viewing.department ? ` · ${viewing.department}` : ''}
-              </div>
               <div className="flex gap-1.5 mt-1.5 flex-wrap">
                 <Badge tone={viewing.role === 'teacher' ? 'blue' : 'violet'}>
                   {viewing.role === 'teacher' ? 'Teacher' : 'Staff'}
@@ -874,8 +855,6 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-            <DetailRow label="Designation" value={viewing.designation} />
-            <DetailRow label="Department" value={viewing.department} />
             <DetailRow label="Email" value={viewing.email} />
             <DetailRow label="Phone" value={viewing.phone} />
             <DetailRow label="Qualification" value={viewing.qualification} />

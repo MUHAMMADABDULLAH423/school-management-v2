@@ -14,9 +14,9 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where,
+  addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, Mail, Trash2, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, Mail, Trash2, ArrowUp, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
@@ -96,6 +96,11 @@ const StudentAdmission: React.FC = () => {
   /** Data Extractor: export menu + printable records view. */
   const [exportOpen, setExportOpen] = useState(false);
   const [printRecords, setPrintRecords] = useState(false);
+  /** Promote Class: source/target class labels ("CLASS 01 - A"). */
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteFrom, setPromoteFrom] = useState('');
+  const [promoteTo, setPromoteTo] = useState('');
+  const [promoting, setPromoting] = useState(false);
 
   const set = (k: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -123,15 +128,17 @@ const StudentAdmission: React.FC = () => {
   /**
    * Suggest a class-prefixed roll number, e.g. class "8" + section "b" -> "8B-01".
    * Serial = max trailing number among students of the same class-section + 1.
+   * The list-parameterized core lets Promote assign sequential rolls to many
+   * students at once (virtual growing list) while the format lives in ONE place.
    */
-  const suggestRollNumber = (cls: string, sec: string): string => {
+  const suggestRollNumberFor = (cls: string, sec: string, list: Student[]): string => {
     const c = cls.trim(), s = sec.trim();
     if (!c || !s) return '';
     const clean = (v: string) => v.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     const prefix = `${clean(c)}${clean(s).slice(0, 1)}`;
     if (!prefix) return '';
     let max = 0;
-    students.forEach((st) => {
+    list.forEach((st) => {
       if (st.class.trim().toLowerCase() === c.toLowerCase()
         && st.section.trim().toLowerCase() === s.toLowerCase()) {
         const m = (st.rollNumber || '').match(/(\d+)(?!.*\d)/);
@@ -141,6 +148,9 @@ const StudentAdmission: React.FC = () => {
     return `${prefix}-${String(max + 1).padStart(2, '0')}`;
   };
 
+  const suggestRollNumber = (cls: string, sec: string): string =>
+    suggestRollNumberFor(cls, sec, students);
+
   /** Filter options come ONLY from the Classes menu — nothing else. */
   const classOptions = useMemo(
     () => classDocs
@@ -148,6 +158,43 @@ const StudentAdmission: React.FC = () => {
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
     [classDocs]
   );
+
+  /** Split a "CLASS 01 - A" label back into class + section. */
+  const splitClassLabel = (label: string): { cls: string; sec: string } => {
+    const idx = label.lastIndexOf(' - ');
+    if (idx < 0) return { cls: label.trim(), sec: '' };
+    return { cls: label.slice(0, idx).trim(), sec: label.slice(idx + 3).trim() };
+  };
+
+  /** Promote preview: active students of the source class, in current roll
+   * order, each with the new roll they would get in the target class
+   * (sequential, continuing from the target class's existing rolls). */
+  const promotePlan = useMemo(() => {
+    if (!promoteFrom || !promoteTo || promoteFrom === promoteTo) return null;
+    const from = splitClassLabel(promoteFrom);
+    const to = splitClassLabel(promoteTo);
+    if (!from.cls || !from.sec || !to.cls || !to.sec) return null;
+    const sameClass = (st: Student, cls: string, sec: string) =>
+      st.class.trim().toLowerCase() === cls.toLowerCase()
+      && st.section.trim().toLowerCase() === sec.toLowerCase();
+    const trailingNum = (roll: string) => {
+      const m = (roll || '').match(/(\d+)(?!.*\d)/);
+      return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+    };
+    const moving = students
+      .filter((s) => s.isActive && sameClass(s, from.cls, from.sec))
+      .sort((a, b) => trailingNum(a.rollNumber) - trailingNum(b.rollNumber)
+        || a.name.localeCompare(b.name));
+    // Virtual target-class list grows as each promoted student gets a roll,
+    // so the helper hands out sequential numbers with no collisions.
+    const virtual: Student[] = students.filter((s) => sameClass(s, to.cls, to.sec));
+    const rows = moving.map((s) => {
+      const newRoll = suggestRollNumberFor(to.cls, to.sec, virtual);
+      virtual.push({ ...s, class: to.cls, section: to.sec, rollNumber: newRoll });
+      return { student: s, newRoll };
+    });
+    return { from: promoteFrom, to: promoteTo, toCls: to.cls, toSec: to.sec, rows };
+  }, [students, promoteFrom, promoteTo]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -391,6 +438,40 @@ const StudentAdmission: React.FC = () => {
     });
   };
 
+  /** Move every active student of the source class to the target class in
+   * one batch. Only class/section/rollNumber change — admission numbers
+   * never change, and fees/attendance/marks follow automatically (they are
+   * keyed by studentId). Inactive students are excluded by the preview. */
+  const runPromote = async () => {
+    if (!promotePlan || promotePlan.rows.length === 0 || promoting) return;
+    const user = currentUser;
+    if (!user) return;
+    setPromoting(true);
+    try {
+      const batch = writeBatch(db);
+      promotePlan.rows.forEach(({ student, newRoll }) => {
+        batch.update(doc(db, 'students', student.id), {
+          class: promotePlan.toCls,
+          section: promotePlan.toSec,
+          rollNumber: newRoll,
+        });
+      });
+      await batch.commit();
+      await auditLog(user.uid, user.name, 'Promoted class',
+        `Promoted ${promotePlan.rows.length} student${promotePlan.rows.length === 1 ? '' : 's'} from ${promotePlan.from} to ${promotePlan.to} (rolls reassigned)`);
+      setMsgIsError(false);
+      setMsg(`Promoted ${promotePlan.rows.length} student${promotePlan.rows.length === 1 ? '' : 's'} from ${promotePlan.from} to ${promotePlan.to}.`);
+      setPromoteOpen(false);
+      setPromoteFrom('');
+      setPromoteTo('');
+    } catch (e: any) {
+      setMsgIsError(true);
+      setMsg(e?.message || 'Failed to promote class.');
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   const copyTempPassword = async () => {
     if (parentResult?.status !== 'created') return;
     try {
@@ -468,6 +549,9 @@ const StudentAdmission: React.FC = () => {
                   </>
                 )}
               </div>
+              <GhostButton onClick={() => { setPromoteFrom(''); setPromoteTo(''); setPromoteOpen(true); }} title="Move a whole class to the next class">
+                <ArrowUp className="w-4 h-4" /> Promote Class
+              </GhostButton>
               <PrimaryButton onClick={openAdd}>
                 <UserPlus className="w-4 h-4" /> Admit Student
               </PrimaryButton>
@@ -796,6 +880,84 @@ const StudentAdmission: React.FC = () => {
             <GhostButton onClick={() => setModalOpen(false)}>Cancel</GhostButton>
             <PrimaryButton onClick={save} disabled={saving}>
               {saving ? 'Saving…' : editing ? 'Save Changes' : 'Admit Student'}
+            </PrimaryButton>
+          </div>
+        </Modal>
+      )}
+
+      {promoteOpen && (
+        <Modal
+          title="Promote Class"
+          subtitle="Move all active students of one class to another — rolls are reassigned, admission numbers stay the same"
+          onClose={() => setPromoteOpen(false)}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="From class *">
+              <Select value={promoteFrom} onChange={(e) => setPromoteFrom(e.target.value)}>
+                <option value="">Select class…</option>
+                {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </Field>
+            <Field label="To class *">
+              <Select value={promoteTo} onChange={(e) => setPromoteTo(e.target.value)}>
+                <option value="">Select class…</option>
+                {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </Field>
+          </div>
+
+          {promoteFrom && promoteTo && promoteFrom === promoteTo && (
+            <p className="mt-4 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Source aur target class aik hi hai — alag target class chunein.
+            </p>
+          )}
+
+          {promotePlan && (
+            <div className="mt-4">
+              {promotePlan.rows.length === 0 ? (
+                <p className="text-sm font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  {promotePlan.from} mein koi active student nahi hai — move karne ke liye kuch nahi.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-slate-800">
+                    {promotePlan.rows.length} active student{promotePlan.rows.length === 1 ? '' : 's'} {promotePlan.from} se {promotePlan.to} mein move honge — naye roll numbers neeche dekhein:
+                  </p>
+                  <div className="mt-2 max-h-64 overflow-y-auto nice-scroll rounded-xl border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-left text-xs text-slate-500">
+                          <th className="px-3 py-2">Student</th>
+                          <th className="px-3 py-2">Old roll</th>
+                          <th className="px-3 py-2">New roll</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {promotePlan.rows.map(({ student, newRoll }) => (
+                          <tr key={student.id} className="border-t border-slate-100">
+                            <td className="px-3 py-2 font-semibold text-slate-900">{student.name}</td>
+                            <td className="px-3 py-2 text-slate-600">{student.rollNumber || '—'}</td>
+                            <td className="px-3 py-2 font-bold text-emerald-700">{newRoll}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Admission numbers nahi badlenge. Fees, attendance aur marks student se jure hain, wo khud saath chale jayenge. Deactivated students move nahi honge.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-6">
+            <GhostButton onClick={() => setPromoteOpen(false)}>Cancel</GhostButton>
+            <PrimaryButton
+              onClick={runPromote}
+              disabled={!promotePlan || promotePlan.rows.length === 0 || promoting}
+            >
+              {promoting ? 'Promoting…' : `Promote ${promotePlan?.rows.length ?? 0} student${promotePlan && promotePlan.rows.length === 1 ? '' : 's'}`}
             </PrimaryButton>
           </div>
         </Modal>

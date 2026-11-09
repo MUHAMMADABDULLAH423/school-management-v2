@@ -15,14 +15,15 @@ import {
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
-import { FeeVoucher, FeeStatus, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
+import { FeeVoucher, FeeStatus, PaymentClaim, PaymentMethod, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, PrimaryButton, GhostButton,
   Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
 } from './ui';
 import FeeVoucherPrint, { buildWaLink } from './FeeVoucherPrint';
 import FamilyVoucherPrint, { FamilyEntry } from './FamilyVoucherPrint';
-import { PaymentClaims } from './PaymentClaims';
+import { PaymentClaims, notifyParent } from './PaymentClaims';
+import { payOptionsFor } from './ParentPayModal';
 
 const statusTone = (s: FeeStatus): 'green' | 'amber' | 'blue' | 'red' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'amber' : s === 'Pending' ? 'blue' : 'red';
@@ -48,6 +49,7 @@ async function auditLog(userId: string, userName: string, action: string, detail
 const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
   const { data: fees, loading: feesLoading } = useCollection<FeeVoucher>('fees');
   const { data: students, loading: studentsLoading } = useCollection<Student>('students');
+  const { data: claims } = useCollection<PaymentClaim>('paymentClaims');
   const { school } = useSchool();
   const { currentUser } = useAuth();
 
@@ -79,8 +81,38 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   // Collect-payment form state
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(todayStr());
-  /** 'cash' = cash on counter, otherwise a school bank account id */
+  /** 'cash' = cash on counter, 'proof' = online payment with parent proof
+   * (Easypaisa / JazzCash / bank). The old per-bank options are gone — the
+   * proof itself carries the method, so the bank entry is no longer picked here. */
   const [payChannel, setPayChannel] = useState('cash');
+  /** Proof method + txn id when there is no attached parent claim yet. */
+  const [proofMethod, setProofMethod] = useState<PaymentMethod>('easypaisa');
+  const [proofTxn, setProofTxn] = useState('');
+  /** Full-size receipt screenshot preview. */
+  const [shotPreview, setShotPreview] = useState<string | null>(null);
+
+  /** School accounts parents pay into (Easypaisa / JazzCash / banks). */
+  const proofOptions = useMemo(() => payOptionsFor(school), [school]);
+  const proofLabelFor = (m: PaymentMethod): string => {
+    const o = proofOptions.find((x) => x.method === m);
+    return o ? `${o.label} — ${o.detail}` : m;
+  };
+
+  /** Pending parent claim per voucher (for the "Proof" badge in the table). */
+  const claimByFee = useMemo(() => {
+    const map = new Map<string, PaymentClaim>();
+    claims
+      .filter((c) => c.status === 'pending')
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
+      .forEach((c) => { if (!map.has(c.feeId)) map.set(c.feeId, c); });
+    return map;
+  }, [claims]);
+
+  /** Pending parent claim for the voucher open in the Collect modal. */
+  const pendingClaim = useMemo(
+    () => (collectFor ? claimByFee.get(collectFor.id) || null : null),
+    [collectFor, claimByFee]
+  );
 
   const studentsById = useMemo(() => {
     const m = new Map<string, Student>();
@@ -128,10 +160,17 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   );
 
   const openCollect = (v: FeeVoucher) => {
+    // If the parent already sent proof for this voucher, it auto-attaches:
+    // amount + method + txn come from the claim, channel becomes 'proof'.
+    const claim = claims
+      .filter((c) => c.feeId === v.id && c.status === 'pending')
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0];
     setCollectFor(v);
-    setPayAmount(String(v.dueAmount || 0));
+    setPayAmount(String(claim ? claim.amount : (v.dueAmount || 0)));
     setPayDate(todayStr());
-    setPayChannel('cash');
+    setPayChannel(claim ? 'proof' : 'cash');
+    setProofMethod(claim?.method || 'easypaisa');
+    setProofTxn(claim?.txnId || '');
     setError('');
   };
 
@@ -143,19 +182,27 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
       setError(`Amount cannot exceed due ${formatPKR(collectFor.dueAmount)}.`);
       return;
     }
+    const isProof = payChannel === 'proof';
+    const method: PaymentMethod = pendingClaim?.method || proofMethod;
+    const methodLabel = isProof
+      ? (pendingClaim?.methodLabel || proofLabelFor(method))
+      : '';
+    const txn = isProof ? (pendingClaim?.txnId || proofTxn.trim()) : '';
+    if (isProof && !pendingClaim && !txn) {
+      setError('Transaction ID is required for online proof payments.');
+      return;
+    }
     setBusy(true);
     try {
       const newPaid = (collectFor.paidAmount || 0) + amount;
       const newDue = Math.max(0, (collectFor.totalAmount || 0) - newPaid);
       const status: FeeStatus = newDue <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Pending';
-      const receiptNo = collectFor.receiptNo || `RCPT-${Date.now().toString().slice(-8)}`;
-      const viaBank = payChannel !== 'cash';
-      const bank = viaBank ? (school?.bankAccounts || []).find((b) => b.id === payChannel) : undefined;
+      const receiptNo = collectFor.receiptNo || (txn ? txn : `RCPT-${Date.now().toString().slice(-8)}`);
       await updateDoc(doc(db, 'fees', collectFor.id), {
         paidAmount: newPaid, dueAmount: newDue, status,
         paidDate: payDate, receiptNo,
-        paymentChannel: viaBank ? 'bank' : 'cash',
-        paymentBank: bank ? `${bank.bankName} — ${bank.accountNumber}` : '',
+        paymentChannel: isProof ? method : 'cash',
+        paymentBank: methodLabel,
       });
 
       // Recompute the student's fee status across ALL their vouchers
@@ -173,8 +220,17 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
       const st = studentsById.get(collectFor.studentId);
       if (st) await updateDoc(doc(db, 'students', st.id), { feeStatus });
 
+      // Recording a payment against an attached parent claim approves it.
+      if (pendingClaim) {
+        await updateDoc(doc(db, 'paymentClaims', pendingClaim.id), {
+          status: 'approved', reviewedBy: currentUser.name, reviewedAt: new Date().toISOString(),
+        });
+        await notifyParent(st?.parentId, currentUser.name, 'Fee payment approved',
+          `${formatPKR(amount)} received for ${st?.name || 'your child'} (${collectFor.month}) via ${methodLabel}. Receipt ${receiptNo}.`);
+      }
+
       await auditLog(currentUser.uid, currentUser.name, 'Fee collected',
-        `Collected ${formatPKR(amount)} against ${collectFor.voucherNumber} (${st?.name || ''}); receipt ${receiptNo}; via ${viaBank ? `bank${bank ? ` (${bank.bankName})` : ''}` : 'cash (counter)'}`);
+        `Collected ${formatPKR(amount)} against ${collectFor.voucherNumber} (${st?.name || ''}); receipt ${receiptNo}; via ${isProof ? `${methodLabel}${pendingClaim ? ' (parent proof approved)' : ' (online proof)'}` : 'cash (counter)'}`);
       setCollectFor(null);
     } catch (e: any) {
       setError(e?.message || 'Payment failed. Please try again.');
@@ -372,8 +428,8 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                   <td className="px-3 py-2"><Badge tone={statusTone(f.status)}>{f.status}</Badge></td>
                   <td className="px-3 py-2 whitespace-nowrap" title={f.paymentBank || ''}>
                     {f.paymentChannel ? (
-                      <Badge tone={f.paymentChannel === 'bank' ? 'blue' : 'amber'}>
-                        {f.paymentChannel === 'bank' ? 'Bank' : 'Cash'}
+                      <Badge tone={f.paymentChannel === 'cash' ? 'amber' : f.paymentChannel === 'bank' ? 'blue' : 'green'}>
+                        {f.paymentChannel === 'cash' ? 'Cash' : f.paymentChannel === 'bank' ? 'Bank' : f.paymentChannel === 'easypaisa' ? 'Easypaisa' : 'JazzCash'}
                       </Badge>
                     ) : (
                       <span className="text-xs text-slate-300">—</span>
@@ -381,6 +437,14 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
+                      {claimByFee.get(f.id) && (
+                        <span
+                          className="inline-flex items-center px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold"
+                          title="Parent ne online payment ka proof bheja hai — Collect khol kar check karein aur approve karein"
+                        >
+                          Proof
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => setPrintFor(f)}
@@ -476,14 +540,60 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
             <Field label="Payment channel">
               <Select value={payChannel} onChange={(e) => setPayChannel(e.target.value)}>
                 <option value="cash">Cash on counter</option>
-                {(school?.bankAccounts || []).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    Bank — {b.bankName} · {b.accountNumber}{b.isDefault ? ' (default)' : ''}
-                  </option>
-                ))}
+                <option value="proof">Online payment — parent proof (Easypaisa / JazzCash / Bank)</option>
               </Select>
             </Field>
           </div>
+
+          {payChannel === 'proof' && (
+            <div className="mt-4">
+              {pendingClaim ? (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+                  <div className="text-sm font-bold text-amber-900">Parent payment proof — auto-attached</div>
+                  <div className="mt-1 text-sm text-amber-900">
+                    {pendingClaim.methodLabel} · {formatPKR(pendingClaim.amount)} · Txn{' '}
+                    <span className="font-mono font-bold">{pendingClaim.txnId}</span>
+                  </div>
+                  <div className="text-xs text-amber-800 mt-0.5">
+                    Sent by {pendingClaim.submittedBy} on {pendingClaim.submittedAt.slice(0, 10)}
+                  </div>
+                  {pendingClaim.screenshot && (
+                    <button type="button" onClick={() => setShotPreview(pendingClaim.screenshot || null)} className="mt-2 block" title="View receipt screenshot">
+                      <img src={pendingClaim.screenshot} alt="Payment receipt" className="w-20 h-20 object-cover rounded-xl border border-amber-300 hover:border-amber-500" />
+                    </button>
+                  )}
+                  <p className="mt-2 text-xs font-semibold text-amber-900">
+                    Record karne par ye claim approve ho jayega aur parent ko notice mil jayega.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs text-slate-600">
+                    Is voucher ke liye parent ka koi pending proof nahi hai — method chunein aur transaction ID likhein.
+                  </p>
+                  {proofOptions.length === 0 ? (
+                    <p className="text-xs font-semibold text-amber-700">
+                      School Profile mein Easypaisa / JazzCash / bank account set karein — warna proof ka method nahi dikhega.
+                    </p>
+                  ) : (
+                    <Field label="Paid via">
+                      <Select value={proofMethod} onChange={(e) => setProofMethod(e.target.value as PaymentMethod)}>
+                        {(['easypaisa', 'jazzcash', 'bank'] as PaymentMethod[])
+                          .filter((m) => proofOptions.some((o) => o.method === m))
+                          .map((m) => {
+                            const o = proofOptions.find((x) => x.method === m)!;
+                            return <option key={m} value={m}>{o.label} — {o.detail}</option>;
+                          })}
+                      </Select>
+                    </Field>
+                  )}
+                  <Field label="Transaction ID *">
+                    <TextInput value={proofTxn} onChange={(e) => setProofTxn(e.target.value)} placeholder="e.g. 84739201" className="font-mono" />
+                  </Field>
+                </div>
+              )}
+            </div>
+          )}
           <div className="mt-3 text-sm text-slate-600">
             Due: <b className="text-rose-700">{formatPKR(collectFor.dueAmount)}</b>
             {' · '}After payment: <b>{formatPKR(Math.max(0, collectFor.dueAmount - (parseFloat(payAmount) || 0)))}</b>
@@ -495,6 +605,17 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
               <Wallet className="w-4 h-4" /> {busy ? 'Saving…' : 'Record Payment'}
             </PrimaryButton>
           </div>
+        </Modal>
+      )}
+
+      {/* Receipt screenshot preview (from an attached parent claim) */}
+      {shotPreview && (
+        <Modal
+          title="Payment receipt"
+          subtitle="Parent's submitted proof"
+          onClose={() => setShotPreview(null)}
+        >
+          <img src={shotPreview} alt="Payment receipt" className="w-full rounded-xl border border-slate-200" />
         </Modal>
       )}
 

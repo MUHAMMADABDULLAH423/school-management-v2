@@ -25,7 +25,7 @@ async function auditLog(userId: string, userName: string, action: string, detail
   } catch { /* audit must never break the UI */ }
 }
 
-async function notifyParent(parentId: string | undefined, by: string, title: string, body: string) {
+export async function notifyParent(parentId: string | undefined, by: string, title: string, body: string) {
   if (!parentId) return;
   try {
     await addDoc(collection(db, 'notifications'), {

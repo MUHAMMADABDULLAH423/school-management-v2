@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Clock3, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Clock3, Pencil, Plus, Trash2 } from 'lucide-react';
 import { addDoc, collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useDoc } from '../hooks/useFirestore';
 import { ClassSection, StaffMember, TimetableSlot } from '../types';
 import {
-  Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal, PrimaryButton,
+  Card, CardHeader, EmptyState, Field, GhostButton, Modal, PrimaryButton,
   Select, Spinner, TextInput, useConfirm,
 } from './ui';
 
@@ -184,7 +184,6 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
                           <div className="text-[11px] text-slate-500 flex items-center gap-2">
                             <span>{s.classSection}</span>
                             {s.time && <span className="inline-flex items-center gap-1"><Clock3 className="w-3 h-3" />{s.time}</span>}
-                            {s.room && <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3" />{s.room}</span>}
                           </div>
                         </div>
                       </div>
@@ -263,9 +262,6 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
                                 <div className="text-[11px] font-bold text-slate-900 leading-tight">{cell.subject}</div>
                                 <div className="text-[10px] text-slate-500 truncate">{cell.teacherName}</div>
                                 {cell.time && <div className="text-[10px] text-slate-400">{cell.time}</div>}
-                                {cell.room && (
-                                  <div className="mt-0.5"><Badge tone="slate">{cell.room}</Badge></div>
-                                )}
                               </>
                             ) : canEdit ? (
                               <div className="flex items-center justify-center h-full text-slate-300">
@@ -308,9 +304,6 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
                 <option value="">— Select teacher —</option>
                 {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </Select>
-            </Field>
-            <Field label="Room">
-              <TextInput value={modal.room} onChange={(e) => setModal({ ...modal, room: e.target.value })} placeholder="e.g. Room 4" />
             </Field>
           </div>
           <div className="mt-5 flex items-center justify-between">

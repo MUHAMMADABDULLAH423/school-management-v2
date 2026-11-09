@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import { NoticeList } from '../components/NoticeList';
 import { ParentPayModal } from '../components/ParentPayModal';
+import { AttendanceRegister } from '../components/AttendanceRegister';
 // Built by a sibling agent — imported normally (default export):
 import FeeVoucherPrint from '../components/FeeVoucherPrint';
 
@@ -21,10 +22,6 @@ const clsLabel = (c: string, s: string) => `${c} - ${s}`;
 
 const feeTone = (s: string): 'green' | 'amber' | 'red' | 'blue' =>
   s === 'Paid' ? 'green' : s === 'Partial' ? 'blue' : s === 'Defaulter' ? 'red' : 'amber';
-
-const attTone = (s: string): 'green' | 'red' | 'amber' | 'blue' | 'violet' =>
-  s === 'Present' ? 'green' : s === 'Absent' ? 'red' : s === 'Late' ? 'amber'
-    : s === 'HalfDay' ? 'blue' : 'violet';
 
 const gradeTone = (g: string): 'green' | 'blue' | 'amber' | 'red' | 'slate' =>
   g === 'A+' || g === 'A' ? 'green' : g === 'B' || g === 'C' ? 'blue'
@@ -91,59 +88,10 @@ const ChildrenTab: React.FC = () => {
   );
 };
 
+/** Parent's attendance register — same grid as the admin/principal register,
+ *  but only their own children, and at most the last 1 month (31 days). */
 const AttendanceTab: React.FC = () => {
-  const { currentUser } = useAuth();
-  const { children, loading } = useChildren(currentUser);
-  const { data: records, loading: loadingAtt } = useCollection<AttendanceRecord>('attendance');
-  const [childId, setChildId] = useState('');
-
-  const ids = useMemo(() => new Set(children.map((c) => c.id)), [children]);
-  const rows = useMemo(
-    () => records
-      .filter((r) => r.type === 'student' && r.studentId && ids.has(r.studentId) && (!childId || r.studentId === childId))
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 120),
-    [records, ids, childId]
-  );
-  const nameOf = (id?: string) => children.find((c) => c.id === id)?.name || '—';
-
-  if (loading || loadingAtt) return <Spinner />;
-
-  return (
-    <Card>
-      <CardHeader
-        title="Attendance"
-        subtitle="Daily attendance of your children."
-        pill={`${rows.length}`}
-        action={
-          <select
-            value={childId}
-            onChange={(e) => setChildId(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white"
-          >
-            <option value="">All children</option>
-            {children.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        }
-      />
-      <div className="p-5">
-        {rows.length === 0 ? (
-          <EmptyState title="No attendance records" />
-        ) : (
-          <Table head={['Date', 'Child', 'Class', 'Status']}>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td className="px-3 py-2 font-semibold text-slate-900">{r.date}</td>
-                <td className="px-3 py-2">{nameOf(r.studentId)}</td>
-                <td className="px-3 py-2 text-slate-600">{r.classSection || '—'}</td>
-                <td className="px-3 py-2"><Badge tone={attTone(r.status)}>{r.status}</Badge></td>
-              </tr>
-            ))}
-          </Table>
-        )}
-      </div>
-    </Card>
-  );
+  return <AttendanceRegister parentMode />;
 };
 
 const ResultsTab: React.FC = () => {

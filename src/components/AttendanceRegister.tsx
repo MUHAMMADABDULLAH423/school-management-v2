@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
 import {
-  AttendanceRecord, AttendanceStatus, ClassSection, StaffMember, Student, todayStr,
+  AttendanceRecord, AttendanceStatus, ClassSection, StaffMember, Student, isOwnChild, todayStr,
 } from '../types';
 import {
   Avatar, Card, CardHeader, EmptyState, Field, SearchInput, Select, Spinner,
@@ -43,21 +44,27 @@ const datesBetween = (from: string, to: string): string[] => {
 const shortDate = (iso: string) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
 
 /**
- * Attendance Register (history) — Admin + Principal only.
+ * Attendance Register (history) — Admin + Principal, and (parentMode) Parents.
  * Rows = students/staff, columns = dates, cells = P/A/L/H/Lv or — (not marked).
  * Both student and staff attendance live in the same `attendance` collection
  * (type 'student' | 'staff', doc id `${date}_${personId}`).
  * Read-only view: marking still happens on the Attendance / Staff Attendance
  * pages; teachers never get this page (no nav item in their portal).
+ * Parent mode: only the parent's OWN children, Students tab only, no class
+ * filter/search. The register shows AT MOST 1 month (31 days) for everyone —
+ * old records are never deleted, only the view is capped.
  */
-export const AttendanceRegister: React.FC = () => {
+export const AttendanceRegister: React.FC<{ parentMode?: boolean }> = ({ parentMode = false }) => {
+  const { currentUser } = useAuth();
   const { data: records, loading: loadingRecords } = useCollection<AttendanceRecord>('attendance');
   const { data: students, loading: loadingStudents } = useCollection<Student>('students');
   const { data: staff, loading: loadingStaff } = useCollection<StaffMember>('staff');
   const { data: classes } = useCollection<ClassSection>('classes');
 
   const [mode, setMode] = useState<'student' | 'staff'>('student');
-  const [from, setFrom] = useState(addDays(todayStr(), -13));
+  // Parent mode opens on the full last month (30 days); admin/principal on 14.
+  // Either way the range can never exceed 31 days (1 month) — see effTo below.
+  const [from, setFrom] = useState(addDays(todayStr(), parentMode ? -29 : -13));
   const [to, setTo] = useState(todayStr());
   const [classFilter, setClassFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -99,6 +106,7 @@ export const AttendanceRegister: React.FC = () => {
       });
       return students
         .filter((s) => s.isActive || withRecords.has(s.id))
+        .filter((s) => !parentMode || isOwnChild(s, currentUser))
         .filter((s) => classFilter === 'all' || `${s.class} - ${s.section}` === classFilter)
         .filter((s) => !query || [s.name, s.rollNumber, s.admissionNo]
           .some((v) => (v || '').toLowerCase().includes(query)))
@@ -117,7 +125,7 @@ export const AttendanceRegister: React.FC = () => {
       .filter((s) => !query || [s.name, s.role]
         .some((v) => (v || '').toLowerCase().includes(query)))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [students, staff, records, mode, from, effTo, classFilter, q]);
+  }, [students, staff, records, mode, from, effTo, classFilter, q, parentMode, currentUser]);
 
   const summary = (personId: string) => {
     let p = 0, a = 0, marked = 0;
@@ -137,19 +145,23 @@ export const AttendanceRegister: React.FC = () => {
   return (
     <Card>
       <CardHeader
-        title="Attendance Register"
-        subtitle="History — rows are people, columns are dates. Read-only; marking stays on the Attendance pages."
-        pill={`${dates.length} days · ${people.length} people`}
+        title={parentMode ? 'My Children\u2019s Attendance' : 'Attendance Register'}
+        subtitle={parentMode
+          ? 'Aapke bachon ki attendance — pichle 1 month ka record. Sirf dekh sakte hain, edit nahi.'
+          : 'History — rows are people, columns are dates. Read-only; marking stays on the Attendance pages.'}
+        pill={`${dates.length} days · ${people.length} ${parentMode ? 'children' : 'people'}`}
       />
       <div className="p-5">
-        <Tabs
-          active={mode}
-          onChange={(id) => setMode(id as 'student' | 'staff')}
-          tabs={[
-            { id: 'student', label: 'Students' },
-            { id: 'staff', label: 'Staff' },
-          ]}
-        />
+        {!parentMode && (
+          <Tabs
+            active={mode}
+            onChange={(id) => setMode(id as 'student' | 'staff')}
+            tabs={[
+              { id: 'student', label: 'Students' },
+              { id: 'staff', label: 'Staff' },
+            ]}
+          />
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4 mb-4">
           <Field label="From">
@@ -158,7 +170,7 @@ export const AttendanceRegister: React.FC = () => {
           <Field label="To">
             <TextInput type="date" value={to} min={from} max={todayStr()} onChange={(e) => setTo(e.target.value)} />
           </Field>
-          {mode === 'student' && (
+          {mode === 'student' && !parentMode && (
             <Field label="Class">
               <Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
                 <option value="all">All Classes</option>
@@ -166,13 +178,15 @@ export const AttendanceRegister: React.FC = () => {
               </Select>
             </Field>
           )}
-          <Field label="Search person">
-            <SearchInput
-              value={q}
-              onChange={setQ}
-              placeholder={mode === 'student' ? 'Search name or roll…' : 'Search name…'}
-            />
-          </Field>
+          {!parentMode && (
+            <Field label="Search person">
+              <SearchInput
+                value={q}
+                onChange={setQ}
+                placeholder={mode === 'student' ? 'Search name or roll…' : 'Search name…'}
+              />
+            </Field>
+          )}
         </div>
 
         {rangeClamped && (
@@ -182,7 +196,10 @@ export const AttendanceRegister: React.FC = () => {
         )}
 
         {people.length === 0 ? (
-          <EmptyState title="No people found" hint="Try a different class or search." />
+          <EmptyState
+            title={parentMode ? 'No attendance records' : 'No people found'}
+            hint={parentMode ? 'Is range mein aapke bachon ki koi attendance nahi lagi.' : 'Try a different class or search.'}
+          />
         ) : (
           <div className="overflow-x-auto nice-scroll border border-slate-200 rounded-xl">
             <table className="w-full text-sm border-collapse">

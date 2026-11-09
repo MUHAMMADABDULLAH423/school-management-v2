@@ -4,7 +4,7 @@ import { Pencil, Plus, UserCheck, UserX, Eye, ChevronDown, Copy, Check, X, Messa
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useSchool } from '../hooks/useFirestore';
-import { StaffMember, StaffRole, ClassSection, formatPKR } from '../types';
+import { StaffMember, StaffRole, ClassSection, UserProfile, formatPKR } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton, Modal,
   PrimaryButton, SearchInput, Select, Spinner, Table, TextInput, useConfirm,
@@ -33,6 +33,9 @@ interface StaffForm {
   photo: string;
 }
 
+/** Login profile doc (same shape as UserManager's UserDoc). */
+type UserDoc = UserProfile & { id: string };
+
 const emptyForm = (): StaffForm => ({
   name: '', email: '', phone: '', role: 'teacher',
   designation: '', department: '', qualification: '',
@@ -46,6 +49,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const { currentUser } = useAuth();
   const { data: staff, loading } = useCollection<StaffMember>('staff');
   const { data: classDocs } = useCollection<ClassSection>('classes');
+  const { data: users, loading: loadingUsers } = useCollection<UserDoc>('users');
   const { school } = useSchool();
   const { ask, dialog } = useConfirm();
 
@@ -64,6 +68,13 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
   const [copied, setCopied] = useState(false);
   /** Email of the row whose invite is being (re)sent — disables its button. */
   const [invitingEmail, setInvitingEmail] = useState('');
+  /** Bulk missing-logins run in progress / its summary. */
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    invited: string[];
+    temp: { name: string; email: string; tempPassword: string }[];
+    failed: { name: string; email: string; error: string }[];
+  } | null>(null);
 
   const logAudit = async (action: string, details: string) => {
     if (!currentUser) return;
@@ -162,6 +173,17 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [staff, search, roleFilter]);
+
+  /** Active staff WITHOUT a login profile (users doc). The Users page only
+   * lists login profiles, so these teachers are invisible there — and they
+   * cannot log in. (Staff added before the invite feature never got one.) */
+  const missingLogins = useMemo(() => {
+    if (loadingUsers) return [];
+    const have = new Set(users.map((u) => (u.email || '').trim().toLowerCase()));
+    return staff.filter(
+      (m) => m.isActive && m.email && !have.has(m.email.trim().toLowerCase())
+    );
+  }, [staff, users, loadingUsers]);
 
   const openAdd = () => {
     // Generate the final Firestore doc id ONCE, up front — the staff doc and
@@ -356,6 +378,48 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
     });
   };
 
+  /** Create logins for every active staff member missing one — same invite
+   * flow as the per-row mail button, run in one go. */
+  const syncLogins = () => {
+    if (missingLogins.length === 0 || syncing) return;
+    ask({
+      title: 'Create missing logins',
+      message: `Create login accounts for ${missingLogins.length} staff member${missingLogins.length === 1 ? '' : 's'} without one? Each will get a set-password invite email.`,
+      confirmLabel: 'Create logins',
+      onConfirm: async () => {
+        setSyncing(true);
+        setSyncResult(null);
+        const invited: string[] = [];
+        const temp: { name: string; email: string; tempPassword: string }[] = [];
+        const failed: { name: string; email: string; error: string }[] = [];
+        for (const m of missingLogins) {
+          const lr = await resendLoginInvite({
+            email: m.email,
+            name: m.name,
+            role: m.role,
+            phone: m.phone || '',
+            schoolId: currentUser?.schoolId || 'main',
+            staffId: m.id,
+            photoURL: m.photo || undefined,
+          });
+          if (lr.status === 'invited') {
+            invited.push(`${m.name} (${m.email})`);
+            await logAudit('Login invite sent', `Invite email sent to ${m.name} (${m.role}) — ${m.email}`);
+          } else if (lr.status === 'created') {
+            temp.push({ name: m.name, email: m.email, tempPassword: lr.tempPassword });
+            await logAudit('Staff login created', `Login created for ${m.name} (${m.role}) — ${m.email}; invite email failed, temporary password shown once to admin`);
+          } else if (lr.status === 'exists') {
+            invited.push(`${m.name} (${m.email}) — already existed`);
+          } else {
+            failed.push({ name: m.name, email: m.email, error: lr.error });
+          }
+        }
+        setSyncResult({ invited, temp, failed });
+        setSyncing(false);
+      },
+    });
+  };
+
   const copyTempPassword = async () => {
     if (loginResult?.status !== 'created') return;
     try {
@@ -383,9 +447,22 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
         subtitle="Manage teaching and non-teaching staff. Photos, subjects and class assignments live here."
         pill={`${filtered.length} member${filtered.length === 1 ? '' : 's'}`}
         action={
-          <PrimaryButton onClick={openAdd}>
-            <Plus className="w-4 h-4" /> Add Teacher / Staff
-          </PrimaryButton>
+          <div className="flex items-center gap-2">
+            {missingLogins.length > 0 && (
+              <button
+                type="button"
+                onClick={syncLogins}
+                disabled={syncing}
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100 border border-amber-200 disabled:opacity-50"
+                title="Create login accounts for staff members who don't have one yet"
+              >
+                <Mail className="w-4 h-4" /> {syncing ? 'Creating…' : `Create ${missingLogins.length} missing login${missingLogins.length === 1 ? '' : 's'}`}
+              </button>
+            )}
+            <PrimaryButton onClick={openAdd}>
+              <Plus className="w-4 h-4" /> Add Teacher / Staff
+            </PrimaryButton>
+          </div>
         }
       />
       <div className="p-5">
@@ -523,6 +600,45 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
           </div>
         )}
 
+        {syncResult && (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-bold text-emerald-900">
+                {syncResult.failed.length > 0 && syncResult.invited.length === 0 && syncResult.temp.length === 0
+                  ? 'Kuch logins nahi ban sake'
+                  : 'Missing logins created'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSyncResult(null)}
+                className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {syncResult.invited.length > 0 && (
+              <p className="mt-1 text-xs text-emerald-800">
+                Invite email bhej di gayi: {syncResult.invited.join(', ')}
+              </p>
+            )}
+            {syncResult.temp.map((t) => (
+              <p key={t.email} className="mt-1 text-xs text-emerald-800">
+                {t.name} (<span className="break-all">{t.email}</span>) — invite email nahi bheji ja saki.
+                Temporary password:{' '}
+                <code className="px-1.5 py-0.5 rounded bg-white border border-emerald-200 font-bold tracking-wide">
+                  {t.tempPassword}
+                </code>
+              </p>
+            ))}
+            {syncResult.failed.length > 0 && (
+              <p className="mt-1 text-xs text-amber-800">
+                Nahi ban sake: {syncResult.failed.map((f) => `${f.name} — ${f.error}`).join('; ')}
+              </p>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <Spinner />
         ) : filtered.length === 0 ? (
@@ -540,6 +656,11 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                     <div className="min-w-0">
                       <div className="font-semibold text-slate-900 truncate">{m.name}</div>
                       <div className="text-xs text-slate-500 truncate">{m.email}</div>
+                      {!loadingUsers && missingLogins.some((x) => x.id === m.id) && (
+                        <span className="mt-0.5 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                          No login
+                        </span>
+                      )}
                     </div>
                   </div>
                 </td>

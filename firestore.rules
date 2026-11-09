@@ -87,8 +87,8 @@ service cloud.firestore {
     match /staff/{staffId} {
       allow get, list: if isSignedIn();
       allow create, update: if isPrincipal() || role() == 'admin';
-      // principal manages staff too (in-app delete from Teachers & Staff)
-      allow delete: if isAdmin();
+      // delete is PRINCIPAL-ONLY (admin can add/edit/deactivate, never delete)
+      allow delete: if isPrincipal();
     }
 
     match /classes/{classId} {

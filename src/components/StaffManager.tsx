@@ -784,14 +784,16 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ allowRoleChange = fa
                   >
                     {m.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteMember(m)}
-                    title="Delete permanently"
-                    className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {currentUser?.role === 'principal' && (
+                    <button
+                      type="button"
+                      onClick={() => deleteMember(m)}
+                      title="Delete permanently"
+                      className="inline-flex p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

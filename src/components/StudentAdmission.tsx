@@ -16,11 +16,11 @@ import React, { useMemo, useState } from 'react';
 import {
   addDoc, collection, doc, updateDoc,
 } from 'firebase/firestore';
-import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { UserPlus, Pencil, Power, PowerOff, Eye, Copy, Check, X, MessageCircle, Mail, IdCard, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
-import { ensureLoginAccount, LoginInviteResult } from '../services/loginInvite';
+import { ensureLoginAccount, resendLoginInvite, LoginInviteResult } from '../services/loginInvite';
 import { waNumber } from './FeeVoucherPrint';
 import { Student, ClassSection, FeeStatus, todayStr } from '../types';
 import {
@@ -85,6 +85,8 @@ const StudentAdmission: React.FC = () => {
   const [saving, setSaving] = useState(false);
   /** Result of the parent-login invite for the last save (shown as a banner). */
   const [parentResult, setParentResult] = useState<LoginInviteResult | null>(null);
+  /** Email of the student row whose parent invite is being (re)sent. */
+  const [invitingEmail, setInvitingEmail] = useState('');
   const [copied, setCopied] = useState(false);
   /** Student whose ID card is open for printing. */
   const [idCardFor, setIdCardFor] = useState<Student | null>(null);
@@ -299,6 +301,42 @@ const StudentAdmission: React.FC = () => {
     }
   };
 
+  /** (Re)send the set-password invite to an already-admitted student's
+   * parent (admitted before the invite feature, or an invite that never
+   * arrived). Same flow as the staff row's mail button. */
+  const sendParentInvite = (s: Student) => {
+    if (!currentUser || !s.parentEmail) return;
+    const email = s.parentEmail;
+    const phone = s.parentWhatsApp || s.parentPhone || '';
+    ask({
+      title: 'Send parent invite',
+      message: `Send a set-password invite email to the parent of ${s.name} (${email})? They will choose their own password from the link and can then use the parent portal.`,
+      confirmLabel: 'Send invite',
+      onConfirm: async () => {
+        setInvitingEmail(email);
+        try {
+          const pr = await resendLoginInvite({
+            email,
+            name: s.parentName || `Parent of ${s.name}`,
+            role: 'parent',
+            phone,
+            schoolId: currentUser.schoolId || 'main',
+          });
+          setParentResult(pr);
+          if (pr.status === 'invited') {
+            await auditLog(currentUser.uid, currentUser.name, 'Parent invite sent',
+              `Invite email sent to parent of ${s.name} (${pr.email})`);
+          } else if (pr.status === 'created') {
+            await auditLog(currentUser.uid, currentUser.name, 'Parent login created',
+              `Created parent login for ${s.parentName || s.name} (${pr.email}) — invite email failed, temporary password shown once to admin`);
+          }
+        } finally {
+          setInvitingEmail('');
+        }
+      },
+    });
+  };
+
   const copyTempPassword = async () => {
     if (parentResult?.status !== 'created') return;
     try {
@@ -494,7 +532,7 @@ const StudentAdmission: React.FC = () => {
           <div className="mx-5 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start justify-between gap-2">
             <p className="text-sm text-amber-900">
               Student save ho gaya, lekin parent login nahi ban saka: {parentResult.error}{' '}
-              Dobara save karke koshish karein, ya Firebase Console se bana lein.
+              Student ki row mein mail wale button se invite dobara bhej dein.
             </p>
             <button
               type="button"
@@ -571,6 +609,17 @@ const StudentAdmission: React.FC = () => {
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
+                  {s.parentEmail && (
+                    <button
+                      type="button"
+                      onClick={() => sendParentInvite(s)}
+                      disabled={invitingEmail === s.parentEmail}
+                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-50"
+                      title="Send parent login invite email"
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

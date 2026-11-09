@@ -4,7 +4,7 @@ import { addDoc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection, useDoc } from '../hooks/useFirestore';
-import { DiaryEntry, StaffMember, Student, isOwnChild, todayStr } from '../types';import {
+import { ClassSection, DiaryEntry, StaffMember, Student, isOwnChild, todayStr } from '../types';import {
   Badge, Card, CardHeader, EmptyState, Field, PrimaryButton, Select,
   Spinner, TextArea, TextInput,
 } from './ui';
@@ -28,6 +28,7 @@ export const DiaryManager: React.FC<{ teacherOnly?: boolean }> = ({ teacherOnly 
   const role = currentUser?.role;
   const { data: entries, loading } = useCollection<DiaryEntry>('diary');
   const { data: students } = useCollection<Student>('students');
+  const { data: classes } = useCollection<ClassSection>('classes');
 
   // Staff doc via direct doc lookup as fallback
   const { data: myStaffDoc } = useDoc<StaffMember>('staff', currentUser?.staffId || 'none');
@@ -41,18 +42,18 @@ export const DiaryManager: React.FC<{ teacherOnly?: boolean }> = ({ teacherOnly 
 
   const canWrite = teacherOnly ? role === 'teacher' : role === 'teacher' || role === 'admin';
 
-  // Classes available to the writer: own assigned classes, else derive from students
+  // Classes available to the writer: a teacher sees only their own assigned
+  // classes; everyone else sees exactly the Classes menu (single source of
+  // truth — never the student-derived list, which hides empty classes and
+  // leaks legacy labels like "Class 8 - A").
   const classOptions = useMemo(() => {
     const staffRec = myStaffDoc || null;
     const assigned = (staffRec?.assignedClasses || []).filter(Boolean);
     if (role === 'teacher' && assigned.length > 0) return assigned.map((v) => ({ value: v, label: v }));
-    const seen = new Map<string, string>();
-    students.filter((s) => s.isActive).forEach((s) => {
-      const v = clsLabel(s.class, s.section);
-      if (!seen.has(v)) seen.set(v, v);
-    });
-    return [...seen.keys()].map((v) => ({ value: v, label: v }));
-  }, [myStaffDoc, students, role]);
+    return classes
+      .map((c) => ({ value: clsLabel(c.name, c.section), label: clsLabel(c.name, c.section) }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [myStaffDoc, classes, role]);
 
   const sel = classSection || classOptions[0]?.value || '';
 

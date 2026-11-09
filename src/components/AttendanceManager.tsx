@@ -5,7 +5,7 @@ import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useFirestore';
 import {
-  AttendanceRecord, AttendanceStatus, ClassSection, Student, todayStr,
+  AttendanceRecord, AttendanceStatus, ClassSection, Student, TimetableSlot, todayStr,
 } from '../types';
 import {
   Avatar, Badge, Card, CardHeader, EmptyState, Field, GhostButton,
@@ -41,6 +41,7 @@ export const AttendanceManager: React.FC = () => {
   const { data: students, loading: loadingStudents } = useCollection<Student>('students');
   const { data: classes } = useCollection<ClassSection>('classes');
   const { data: records, loading: loadingRecords } = useCollection<AttendanceRecord>('attendance');
+  const { data: slots } = useCollection<TimetableSlot>('timetable');
 
   const [classSection, setClassSection] = useState('');
   const [date, setDate] = useState(todayStr());
@@ -48,11 +49,29 @@ export const AttendanceManager: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
 
+  // A teacher may mark attendance ONLY for classes where the timetable gives
+  // them the first period (P1) — any day of the week. Admins keep "All
+  // Classes" plus every class; principals keep every class per-class.
+  // (Firestore rules allow any teacher role to write attendance docs, so
+  // this scoping is enforced in the app — same as the diary's
+  // assigned-classes scoping.)
+  const isTeacher = currentUser?.role === 'teacher';
+  const myStaffId = currentUser?.staffId;
+  const p1Classes = useMemo(() => {
+    if (!isTeacher || !myStaffId) return [];
+    const set = new Set<string>();
+    slots.forEach((s) => {
+      if (s.period === 1 && s.teacherId === myStaffId && s.classSection) set.add(s.classSection);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [slots, isTeacher, myStaffId]);
+
   // Class options: prefer classes collection, fallback to students' class/section combos.
   // Admins also get an "All Classes" option first (teachers stay per-class, so one
   // teacher can't overwrite another class's marks — the record id is per student+date).
   const canViewAll = currentUser?.role === 'admin';
   const options = useMemo(() => {
+    if (isTeacher) return p1Classes.map((v) => ({ value: v, label: v }));
     const list: { value: string; label: string }[] = [];
     if (classes.length > 0) {
       list.push(...classes.map((c) => ({ value: clsLabel(c.name, c.section), label: clsLabel(c.name, c.section) })));
@@ -65,7 +84,7 @@ export const AttendanceManager: React.FC = () => {
       list.push(...[...seen.keys()].map((v) => ({ value: v, label: v })));
     }
     return canViewAll ? [{ value: ALL_VALUE, label: 'All Classes' }, ...list] : list;
-  }, [classes, students, canViewAll]);
+  }, [classes, students, canViewAll, isTeacher, p1Classes]);
 
   const sel = classSection || options[0]?.value || '';
   const isAll = sel === ALL_VALUE;
@@ -99,6 +118,12 @@ export const AttendanceManager: React.FC = () => {
 
   const save = async () => {
     if (!currentUser || !sel || classStudents.length === 0) return;
+    // Save-time guard to match the dropdown: a teacher can only save the
+    // classes the timetable gives them at P1.
+    if (isTeacher && !p1Classes.includes(sel)) {
+      setSavedMsg('Aap sirf un classes ki attendance le sakte hain jin mein timetable mein aapka pehla period (P1) hai.');
+      return;
+    }
     setSaving(true);
     setSavedMsg('');
     const counts: Record<string, number> = {};
@@ -132,7 +157,9 @@ export const AttendanceManager: React.FC = () => {
     <Card>
       <CardHeader
         title="Student Attendance"
-        subtitle="Select a class and date, mark each student, then save."
+        subtitle={isTeacher
+          ? 'Sirf woh classes jin mein timetable mein aapka pehla period (P1) hai.'
+          : 'Select a class and date, mark each student, then save.'}
         pill={`${date}`}
       />
       <div className="p-5">
@@ -158,6 +185,12 @@ export const AttendanceManager: React.FC = () => {
         {savedMsg && (
           <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
             {savedMsg}
+          </div>
+        )}
+
+        {isTeacher && p1Classes.length === 0 && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            Timetable mein aapka pehla period (P1) kisi class mein nahi laga — admin se apna pehla period lagwayein, phir aap us class ki attendance le sakenge.
           </div>
         )}
 

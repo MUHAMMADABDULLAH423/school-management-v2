@@ -126,8 +126,9 @@ const StudentAdmission: React.FC = () => {
     ? `${form.class.trim()} - ${form.section.trim()}` : '';
 
   /**
-   * Suggest a class-prefixed roll number, e.g. class "8" + section "b" -> "8B-01".
-   * Serial = max trailing number among students of the same class-section + 1.
+   * Suggest a class-prefixed roll number, e.g. class "8" + section "b" -> "8B-1001".
+   * Serial starts at 1001: max(1000, max trailing number among students of
+   * the same class-section) + 1. Old rolls (e.g. 8B-01) are never rewritten.
    * The list-parameterized core lets Promote assign sequential rolls to many
    * students at once (virtual growing list) while the format lives in ONE place.
    */
@@ -137,7 +138,7 @@ const StudentAdmission: React.FC = () => {
     const clean = (v: string) => v.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     const prefix = `${clean(c)}${clean(s).slice(0, 1)}`;
     if (!prefix) return '';
-    let max = 0;
+    let max = 1000;
     list.forEach((st) => {
       if (st.class.trim().toLowerCase() === c.toLowerCase()
         && st.section.trim().toLowerCase() === s.toLowerCase()) {
@@ -145,7 +146,7 @@ const StudentAdmission: React.FC = () => {
         if (m) max = Math.max(max, parseInt(m[1], 10));
       }
     });
-    return `${prefix}-${String(max + 1).padStart(2, '0')}`;
+    return `${prefix}-${max + 1}`;
   };
 
   const suggestRollNumber = (cls: string, sec: string): string =>

@@ -3,7 +3,7 @@ import { Clock3, Pencil, Plus, Trash2 } from 'lucide-react';
 import { addDoc, collection, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
-import { useCollection, useDoc } from '../hooks/useFirestore';
+import { useCollection, useDoc, useSchool } from '../hooks/useFirestore';
 import { ClassSection, StaffMember, TimetableSlot } from '../types';
 import {
   Card, CardHeader, EmptyState, Field, GhostButton, Modal, PrimaryButton,
@@ -11,12 +11,12 @@ import {
 } from './ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7];
-
+/* Period times by period number (index 0 unused). P8 added for the 8-period setting. */
 const PERIOD_TIMES = [
   '',
   '8:00 – 8:45', '8:45 – 9:30', '9:30 – 10:15',
   '10:45 – 11:30', '11:30 – 12:15', '12:15 – 1:00', '1:00 – 1:45',
+  '1:45 – 2:30',
 ];
 
 const clsLabel = (c: string, s: string) => `${c} - ${s}`;
@@ -50,6 +50,26 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
   const { data: staff } = useCollection<StaffMember>('staff');
   const { data: myStaffDoc } = useDoc<StaffMember>('staff', currentUser?.staffId || 'none');
   const { ask, dialog } = useConfirm();
+
+  // Periods per day — school setting (default 7, adjustable 4–8 from the header).
+  const { school } = useSchool();
+  const periodsPerDay = Math.min(8, Math.max(4, school?.periodsPerDay || 7));
+  const PERIODS = useMemo(
+    () => Array.from({ length: periodsPerDay }, (_, i) => i + 1),
+    [periodsPerDay]
+  );
+
+  const changePeriods = async (n: number) => {
+    if (!currentUser) return;
+    try {
+      await setDoc(doc(db, 'schools', 'main'), { periodsPerDay: n }, { merge: true });
+      await logAudit(currentUser.uid, currentUser.name, 'Changed periods per day',
+        `Timetable periods per day set to ${n}`);
+      setMsg(`Periods per day set to ${n}.`);
+    } catch (e: any) {
+      setMsg(e?.message || 'Failed to save periods setting.');
+    }
+  };
 
   const [classSection, setClassSection] = useState('');
   const [modal, setModal] = useState<SlotForm | null>(null);
@@ -205,12 +225,26 @@ export const TimetableManager: React.FC<{ editable?: boolean }> = ({ editable = 
         title="Class Timetable"
         subtitle={canEdit ? 'Click a cell to add or edit a period.' : 'Weekly schedule (read-only).'}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="w-48">
               <Select value={sel} onChange={(e) => setClassSection(e.target.value)}>
                 {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
+            {canEdit && (
+              <label className="shrink-0 flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                Periods
+                <Select
+                  value={String(periodsPerDay)}
+                  onChange={(e) => changePeriods(Number(e.target.value))}
+                  className="w-16"
+                >
+                  {[4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </Select>
+              </label>
+            )}
             {canEdit && (
               <button
                 type="button"

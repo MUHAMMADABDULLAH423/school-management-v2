@@ -28,6 +28,8 @@ export interface SchoolProfile {
   bankAccounts: BankAccount[];
   gpsLocation: { lat: number; lng: number; radius: number };
   academicYear: string;
+  /** Periods per school day in the timetable (4–8, default 7). Set from the Timetable header. */
+  periodsPerDay?: number;
   /** Base64 data-URL school logo (client-resized, no Storage needed). */
   logo?: string;
   createdAt: string;

@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { FeeVoucher, FeeStatus, PaymentClaim, PaymentMethod, ClassSection, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, PrimaryButton, GhostButton,
-  Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
+  Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard, useConfirm,
 } from './ui';
 import FeeVoucherPrint, { buildWaLink } from './FeeVoucherPrint';
 import FamilyVoucherPrint, { FamilyEntry } from './FamilyVoucherPrint';
@@ -53,6 +53,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   const { data: classes } = useCollection<ClassSection>('classes');
   const { school } = useSchool();
   const { currentUser } = useAuth();
+  const { ask, dialog } = useConfirm();
 
   const [monthFilter, setMonthFilter] = useState(monthStr());
   const [allMonths, setAllMonths] = useState(false);
@@ -256,7 +257,41 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
     }
   };
 
-  const generateVouchers = async () => {
+  /**
+   * Voucher generation — ONCE per month.
+   * The month is "generated" when every active student has a voucher for it.
+   * Re-running then is blocked outright. If the month was only partly
+   * generated (a student was admitted after the first run), a confirm dialog
+   * asks first — and only the missing students get a voucher; existing
+   * vouchers and their fees are never touched (the `existing` skip below
+   * already guaranteed no duplicates).
+   */
+  const generateVouchers = () => {
+    if (!currentUser) return;
+    const t = parseFloat(tuitionFee) || 0;
+    const tr = parseFloat(transportFee) || 0;
+    const ex = parseFloat(examFee) || 0;
+    if (t + tr + ex <= 0) { setError('Set at least one fee head.'); return; }
+    const monthExisting = fees.filter((f) => f.month === genMonth);
+    const activeStudents = students.filter((s) => s.isActive);
+    const missing = activeStudents.filter((s) => !monthExisting.some((f) => f.studentId === s.id));
+    if (monthExisting.length > 0 && missing.length === 0) {
+      setError(`Vouchers for ${genMonth} are already generated — all ${activeStudents.length} active students have one. A month can only be generated once.`);
+      return;
+    }
+    if (monthExisting.length > 0) {
+      ask({
+        title: `Generate vouchers for ${genMonth}?`,
+        message: `${monthExisting.length} voucher(s) for ${genMonth} already exist. Only the ${missing.length} new student(s) without a voucher will get one — existing vouchers and their fees will NOT change.`,
+        confirmLabel: 'Generate for new students',
+        onConfirm: () => { void runGeneration(); },
+      });
+      return;
+    }
+    void runGeneration();
+  };
+
+  const runGeneration = async () => {
     if (!currentUser) return;
     const t = parseFloat(tuitionFee) || 0;
     const tr = parseFloat(transportFee) || 0;
@@ -739,6 +774,8 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
           onClose={() => setFamilyPrint(null)}
         />
       )}
+
+      {dialog}
     </div>
   );
 };

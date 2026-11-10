@@ -43,6 +43,9 @@ const datesBetween = (from: string, to: string): string[] => {
 /** "2026-11-09" -> "09/11". */
 const shortDate = (iso: string) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
 
+/** First day of the month of an ISO date ("2026-11-09" -> "2026-11-01"). */
+const firstOfMonth = (iso: string) => `${iso.slice(0, 7)}-01`;
+
 /**
  * Attendance Register (history) — Admin + Principal, and (parentMode) Parents.
  * Rows = students/staff, columns = dates, cells = P/A/L/H/Lv or — (not marked).
@@ -62,9 +65,10 @@ export const AttendanceRegister: React.FC<{ parentMode?: boolean }> = ({ parentM
   const { data: classes } = useCollection<ClassSection>('classes');
 
   const [mode, setMode] = useState<'student' | 'staff'>('student');
-  // Parent mode opens on the full last month (30 days); admin/principal on 14.
-  // Either way the range can never exceed 31 days (1 month) — see effTo below.
-  const [from, setFrom] = useState(addDays(todayStr(), parentMode ? -29 : -13));
+  // Default range = the WHOLE current month (1st of the month → today) for
+  // everyone. Either way the range can never exceed 31 days (1 month) — see
+  // effTo below (a full month is at most 31 days, so it always fits).
+  const [from, setFrom] = useState(firstOfMonth(todayStr()));
   const [to, setTo] = useState(todayStr());
   const [classFilter, setClassFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -122,6 +126,8 @@ export const AttendanceRegister: React.FC<{ parentMode?: boolean }> = ({ parentM
     });
     return staff
       .filter((s) => s.isActive || withRecords.has(s.id))
+      .filter((s) => classFilter === 'all'
+        || (s.assignedClasses || []).some((c) => c.trim().toLowerCase() === classFilter.trim().toLowerCase()))
       .filter((s) => !query || [s.name, s.role]
         .some((v) => (v || '').toLowerCase().includes(query)))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -170,7 +176,7 @@ export const AttendanceRegister: React.FC<{ parentMode?: boolean }> = ({ parentM
           <Field label="To">
             <TextInput type="date" value={to} min={from} max={todayStr()} onChange={(e) => setTo(e.target.value)} />
           </Field>
-          {mode === 'student' && !parentMode && (
+          {!parentMode && (
             <Field label="Class">
               <Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
                 <option value="all">All Classes</option>

@@ -15,7 +15,7 @@ import {
 import { db } from '../config/firebase';
 import { useCollection, useSchool } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
-import { FeeVoucher, FeeStatus, PaymentClaim, PaymentMethod, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
+import { FeeVoucher, FeeStatus, PaymentClaim, PaymentMethod, ClassSection, Student, SchoolProfile, formatPKR, monthStr, todayStr } from '../types';
 import {
   Card, CardHeader, Modal, Field, TextInput, PrimaryButton, GhostButton,
   Badge, SearchInput, Select, Table, EmptyState, Spinner, StatCard,
@@ -50,12 +50,22 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
   const { data: fees, loading: feesLoading } = useCollection<FeeVoucher>('fees');
   const { data: students, loading: studentsLoading } = useCollection<Student>('students');
   const { data: claims } = useCollection<PaymentClaim>('paymentClaims');
+  const { data: classes } = useCollection<ClassSection>('classes');
   const { school } = useSchool();
   const { currentUser } = useAuth();
 
   const [monthFilter, setMonthFilter] = useState(monthStr());
   const [allMonths, setAllMonths] = useState(false);
   const [search, setSearch] = useState('');
+  /** Class filter for the voucher table (Classes menu). */
+  const [classFilter, setClassFilter] = useState('all');
+
+  const classOptions = useMemo(
+    () => classes
+      .map((c) => `${c.name} - ${c.section}`)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [classes]
+  );
   /** Card-driven quick filter: paid / pending / defaulters vouchers. */
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending' | 'defaulters'>('all');
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -136,6 +146,13 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
     if (statusFilter === 'paid') list = list.filter((f) => f.status === 'Paid');
     else if (statusFilter === 'pending') list = list.filter((f) => (f.dueAmount || 0) > 0);
     else if (statusFilter === 'defaulters') list = list.filter((f) => defaulterIds.has(f.studentId));
+    if (classFilter !== 'all') {
+      const want = classFilter.trim().toLowerCase();
+      list = list.filter((f) => {
+        const s = studentsById.get(f.studentId);
+        return !!s && `${s.class} - ${s.section}`.trim().toLowerCase() === want;
+      });
+    }
     const q = search.trim().toLowerCase();
     if (!q) return list;
     return list.filter((f) => {
@@ -144,7 +161,7 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
         (v || '').toLowerCase().includes(q)
       );
     });
-  }, [monthFees, statusFilter, defaulterIds, search, studentsById]);
+  }, [monthFees, statusFilter, defaulterIds, search, studentsById, classFilter]);
 
   const collected = useMemo(
     () => monthFees.reduce((t, f) => t + (f.paidAmount || 0), 0),
@@ -400,8 +417,19 @@ const FeesManager: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => 
             </div>
           }
         />
-        <div className="px-5 py-4 border-b border-slate-100">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search voucher, student, roll…" />
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search voucher, student, roll…" />
+          </div>
+          <Select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            title="Filter by class"
+            className="sm:w-52 shrink-0"
+          >
+            <option value="all">All Classes</option>
+            {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
         </div>
         {feesLoading || studentsLoading ? (
           <Spinner />
